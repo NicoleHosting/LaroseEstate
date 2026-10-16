@@ -1,0 +1,26 @@
+{
+  "name": "the-larose-files",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A server-authoritative multiplayer murder mystery set at the LaRose Estate.",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test --test-concurrency=1",
+    "check": "node --check src/server.js && node --check src/store.js && node --check src/content.js && node --check public/app.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.0.2",
+    "pg": "^8.13.3",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1",
+    "supertest": "^7.1.0"
+  }
+}

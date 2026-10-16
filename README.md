@@ -1,0 +1,139 @@
+# The LaRose Files: Blood Is Thicker Than Water
+
+An immersive, server-authoritative multiplayer murder-mystery game designed to run beside a live Second Life dinner party. The first milestone is a complete Grand Foyer vertical slice: guests enter a private room, receive a secret character dossier, investigate the same visual scene from different perspectives, collect private evidence, communicate in real time, and unlock the study. A host can direct the round from a private game-master console.
+
+![The Grand Foyer](public/assets/grand-foyer.png)
+
+## What is playable
+
+- Create a private event and share its six-character room code.
+- Join as 5–20 players, optionally with a validated avatar image.
+- Receive one of ten private character dossiers (there is no Hassan role), including secrets, objectives, relationships, and a role-specific viewpoint.
+- Reconnect from the same browser using a saved opaque player token.
+- Explore six server-authoritative foyer hotspots: family portrait, guest book, roses, statue, books, and study door.
+- Discover both common and role-specific clue text, with animated evidence reveals and a personal inventory.
+- Find the brass study key and unlock the study for that investigator; the host can also unlock it globally.
+- Use room chat, direct messages, and anonymous tips in real time.
+- Run the event from a private host panel: start/pause, advance rounds, release a clue, control a timer, unlock a room, open final accusations, and reveal the solution.
+- Persist sessions, private evidence, messages, and host state in PostgreSQL on Render. A JSON-file store makes local demos work without a database.
+
+The murderer, timeline, motive, proof chain, and red herrings are fixed and internally consistent. The public client never receives undiscovered evidence, another player's secret dossier, or the solution before the host reveals it.
+
+## Stack
+
+- Node.js 20, Express, and Socket.IO
+- PostgreSQL in production; atomic JSON-file persistence for zero-setup local play
+- Vanilla HTML, CSS, and JavaScript client with no front-end build step
+- Node's built-in test runner plus Supertest
+- Render Blueprint configuration in `render.yaml`
+
+The deliberately small stack keeps the game easy to host and extend while ensuring that authoritative state and secret content remain on the server.
+
+## Quick start
+
+Requirements: Node.js 20.11 or newer.
+
+```bash
+npm install
+npm test
+npm start
+```
+
+Open <http://localhost:3000>. With no `DATABASE_URL`, state is saved to `.data/larose.json` by default.
+
+To test the multiplayer flow:
+
+1. Choose **Create a private game** and enter the host's display name. That browser receives the private host credential.
+2. Copy the room code.
+3. Open a private/incognito window or a second phone on the same network and join with that room code.
+4. Start the investigation from the host dashboard.
+5. Investigate objects from both players. Their private details and inventories can differ.
+6. Find the brass key in the books, then investigate the study door to unlock it for that player.
+7. Send a room message and a direct message; both clients update without refreshing.
+
+For another device on the same Wi-Fi, bind normally and visit `http://<your-computer-LAN-IP>:3000`. Do not expose the development server directly to the public internet.
+
+## Configuration
+
+Copy `.env.example` when you want explicit settings. The server reads process environment variables; in PowerShell, for example:
+
+```powershell
+$env:SESSION_SECRET = "use-a-long-random-secret-here"
+$env:DATABASE_URL = "postgresql://larose:larose@localhost:5432/larose_files"
+$env:PGSSLMODE = "disable"
+npm start
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | HTTP port; defaults to `3000`. |
+| `DATABASE_URL` | PostgreSQL connection string. When absent, the JSON store is used. |
+| `PGSSLMODE` | Set to `disable` for the bundled local Docker database; leave unset on Render. |
+| `DATA_PATH` | JSON-store path; defaults to `.data/larose.json`. |
+| `SESSION_SECRET` | Server secret mixed into token hashes. Set a stable 32+ character value in production. |
+| `TRUST_PROXY` | Set to `1` behind Render's proxy. |
+| `UPLOAD_MAX_MB` | Avatar size ceiling; defaults to 2 MB. |
+| `UPLOAD_DIR` | Avatar directory; point this at a persistent disk in production. |
+
+### PostgreSQL locally
+
+```bash
+docker compose up -d postgres
+```
+
+Then set `DATABASE_URL` to the value shown in `.env.example` and start the app. Tables are created idempotently at boot.
+
+## Deploy to Render
+
+The included Blueprint provisions one web service and one PostgreSQL database.
+
+1. Push this directory to a GitHub repository.
+2. In Render, choose **New → Blueprint** and select the repository.
+3. Review the generated web service and database, then apply the Blueprint.
+4. Wait for `/api/health` to report healthy.
+5. Open the service URL and create the first game session.
+
+`SESSION_SECRET` is generated by Render, `DATABASE_URL` is wired from the managed database, and the Blueprint mounts a persistent disk at `/var/data` for validated avatars. Keep the web service and database in the same region.
+
+## Tests
+
+```bash
+npm run check
+npm test
+```
+
+Tests cover the fixed story invariants, character roster, role-specific evidence, authorization boundaries, saved discoveries, study unlocking, and core host actions. The application also exposes `GET /api/health` for deployment checks.
+
+## Project map
+
+```text
+public/             Responsive game client and original foyer artwork
+src/content.js      Private story bible encoded as server-side game content
+src/store.js        PostgreSQL and local persistence adapters
+src/server.js       HTTP API, upload validation, auth, and Socket.IO events
+tests/              Domain and integration tests
+docs/story-bible.md Full spoiler-marked continuity guide for the game master
+render.yaml         Render web service + PostgreSQL Blueprint
+```
+
+## Security model
+
+- Player and host credentials are random opaque values; only keyed hashes are persisted.
+- Every private route resolves the caller from its bearer token on the server.
+- Evidence lookup is scoped to the authenticated player; the client cannot request another inventory by ID.
+- Hotspot results, prerequisites, room unlocks, and story phase checks are evaluated server-side.
+- Avatar uploads are memory-only, size-limited, and verified by both MIME type and file signature before storage.
+- Socket connections authenticate during the handshake and join only the authorized room/player channels.
+- Host actions require the authenticated host identity; a room code alone grants no host privileges.
+
+This is a strong game-session security baseline, not a substitute for a production penetration test. Put the Render service behind HTTPS (Render does this by default), rotate secrets if exposed, and enable database backups before a paid event.
+
+## Milestone boundary
+
+This release intentionally completes the Grand Foyer instead of scattering unfinished rooms across the estate. The Study currently opens as the milestone payoff/teaser. Dining Room, Library, Ballroom, Conservatory, evidence trading UI, alliance management, interrogation scheduling, the visual suspect-board canvas, and ranked final ballots are designed extension points but are not presented as finished gameplay.
+
+See `docs/story-bible.md` for the spoiler-heavy solution and the planned clue path.
+
+## Artwork
+
+The foyer background is original AI-generated concept art created for this project. It intentionally contains no baked-in labels or controls; every hotspot, state change, and evidence action is real HTML and server-backed game logic layered over the scene.

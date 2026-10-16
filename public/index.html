@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#130307" />
+    <meta
+      name="description"
+      content="The LaRose Files: Blood Is Thicker Than Water — a live multiplayer murder mystery at LaRose Estate."
+    />
+    <title>The LaRose Files — Blood Is Thicker Than Water</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to the investigation</a>
+
+    <div class="ambient-layer" aria-hidden="true">
+      <span class="ember ember-one"></span>
+      <span class="ember ember-two"></span>
+      <span class="ember ember-three"></span>
+    </div>
+
+    <main id="auth-screen" class="auth-screen">
+      <section class="auth-hero" aria-labelledby="game-title">
+        <div class="brand-crest" aria-hidden="true"><span>LR</span></div>
+        <p class="eyebrow">An immersive multiplayer mystery</p>
+        <h1 id="game-title">The LaRose Files</h1>
+        <p class="auth-subtitle">Blood Is Thicker Than Water</p>
+        <div class="filigree" aria-hidden="true"><span></span><b>◆</b><span></span></div>
+        <p class="auth-premise">
+          The inheritance was about to change. Then Madame Vivienne LaRose was found dead.
+          Enter the estate, protect your secrets, and discover which guest came prepared to kill.
+        </p>
+
+        <div id="reconnect-card" class="reconnect-card" hidden>
+          <div>
+            <span class="micro-label">A saved invitation was found</span>
+            <strong id="reconnect-summary">Return to your investigation</strong>
+          </div>
+          <div class="inline-actions">
+            <button id="reconnect-button" class="button button-gold" type="button">Re-enter estate</button>
+            <button id="forget-session-button" class="button button-ghost" type="button">Not now</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="entry-card" aria-label="Create or join a private game">
+        <div class="entry-tabs" role="tablist" aria-label="Invitation options">
+          <button
+            id="join-tab"
+            class="entry-tab is-active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="join-panel"
+          >
+            Join a game
+          </button>
+          <button
+            id="host-tab"
+            class="entry-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="host-panel"
+          >
+            Host a game
+          </button>
+        </div>
+
+        <form id="join-form" class="entry-form" autocomplete="on">
+          <div id="join-panel" role="tabpanel" aria-labelledby="join-tab">
+            <div class="form-heading">
+              <p class="eyebrow">Your invitation awaits</p>
+              <h2>Enter the estate</h2>
+              <p>Use the private code from your host. Your dossier will be revealed after you join.</p>
+            </div>
+            <label class="field-label" for="room-code">Private room code</label>
+            <input
+              id="room-code"
+              name="code"
+              class="code-input"
+              type="text"
+              inputmode="text"
+              maxlength="8"
+              placeholder="LAROSE"
+              autocomplete="one-time-code"
+              required
+            />
+            <label class="field-label" for="display-name">Display name</label>
+            <input id="display-name" name="displayName" type="text" maxlength="32" placeholder="Amara" required />
+            <label class="field-label" for="avatar-upload">Portrait <span>(optional)</span></label>
+            <label class="file-picker" for="avatar-upload">
+              <span id="avatar-preview" class="avatar-preview" aria-hidden="true">+</span>
+              <span><b>Add a portrait</b><small>JPG, PNG, or WEBP · up to 2 MB</small></span>
+            </label>
+            <input id="avatar-upload" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" />
+            <button class="button button-gold button-full" type="submit">
+              <span>Accept invitation</span><span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+
+        <form id="host-form" class="entry-form" autocomplete="on" hidden>
+          <div id="host-panel" role="tabpanel" aria-labelledby="host-tab">
+            <div class="form-heading">
+              <p class="eyebrow">Game master access</p>
+              <h2>Open the house</h2>
+              <p>Create a private session, invite 5–20 guests, and direct the evening in real time.</p>
+            </div>
+            <label class="field-label" for="host-name">Your name</label>
+            <input id="host-name" name="hostName" type="text" maxlength="32" placeholder="Madame Host" required />
+            <label class="field-label" for="event-name">Evening title</label>
+            <input id="event-name" name="eventName" type="text" maxlength="60" value="A Night at LaRose Estate" required />
+            <button class="button button-gold button-full" type="submit">
+              <span>Create private game</span><span aria-hidden="true">→</span>
+            </button>
+            <p class="privacy-note"><span aria-hidden="true">♢</span> Your session is private and protected by a unique room code.</p>
+          </div>
+        </form>
+        <p id="auth-error" class="form-error" role="alert" hidden></p>
+      </section>
+    </main>
+
+    <div id="game-shell" class="game-shell" hidden>
+      <header class="topbar">
+        <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="Open navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <button class="wordmark" type="button" data-view-target="mansion" aria-label="Return to the mansion">
+          <span>The LaRose Estate</span>
+          <small>Blood Is Thicker Than Water</small>
+        </button>
+
+        <nav id="primary-nav" class="primary-nav" aria-label="Investigation">
+          <button class="nav-item is-active" type="button" data-view-target="mansion" aria-current="page">
+            <span class="nav-icon" aria-hidden="true">⌂</span><span>Mansion</span>
+          </button>
+          <button class="nav-item" type="button" data-view-target="casefile">
+            <span class="nav-icon" aria-hidden="true">▱</span><span>Case file</span>
+          </button>
+          <button class="nav-item" type="button" data-view-target="messages">
+            <span class="nav-icon" aria-hidden="true">✉</span><span>Messages</span><span id="message-badge" class="nav-badge" hidden>0</span>
+          </button>
+          <button class="nav-item" type="button" data-view-target="suspects">
+            <span class="nav-icon" aria-hidden="true">♙</span><span>Suspects</span>
+          </button>
+          <button class="nav-item" type="button" data-view-target="journal">
+            <span class="nav-icon" aria-hidden="true">▤</span><span>Journal</span>
+          </button>
+          <button class="nav-item" type="button" data-view-target="players">
+            <span class="nav-icon" aria-hidden="true">♧</span><span>Guests</span>
+          </button>
+          <button id="host-nav-button" class="nav-item host-only" type="button" data-view-target="host" hidden>
+            <span class="nav-icon" aria-hidden="true">⚜</span><span>Host</span>
+          </button>
+        </nav>
+
+        <div class="session-chip" title="Private session code">
+          <span>Room</span><strong id="header-room-code">—</strong>
+          <button id="copy-code-button" type="button" aria-label="Copy room code">⧉</button>
+        </div>
+        <button id="profile-button" class="profile-button" type="button" aria-haspopup="true" aria-expanded="false">
+          <span id="profile-avatar" class="profile-avatar" aria-hidden="true">?</span>
+          <span class="profile-copy"><strong id="profile-name">Guest</strong><small id="profile-role">Unassigned</small></span>
+          <span aria-hidden="true">⌄</span>
+        </button>
+        <div id="profile-menu" class="profile-menu" hidden>
+          <button type="button" data-view-target="casefile">View my dossier</button>
+          <button id="leave-session-button" type="button">Leave this session</button>
+        </div>
+      </header>
+
+      <main id="main-content" class="app-content" tabindex="-1">
+        <section id="view-mansion" class="view view-mansion is-active" data-view="mansion" aria-labelledby="mansion-title">
+          <h1 id="mansion-title" class="sr-only">Explore LaRose Estate</h1>
+          <div class="mansion-layout">
+            <aside class="phase-card glass-panel">
+              <div class="panel-ornament" aria-hidden="true"></div>
+              <span class="micro-label">Current phase</span>
+              <div class="phase-heading-row">
+                <h2 id="phase-name">Waiting Room</h2>
+                <span id="connection-status" class="connection-status"><i></i> Live</span>
+              </div>
+              <ol id="phase-track" class="phase-track" aria-label="Game progress">
+                <li class="is-current"><span>1</span><small>Gather</small></li>
+                <li><span>2</span><small>Investigate</small></li>
+                <li><span>3</span><small>Interrogate</small></li>
+                <li><span>4</span><small>Accuse</small></li>
+                <li><span>5</span><small>Reveal</small></li>
+              </ol>
+              <p id="phase-description">The guests are assembling. Explore the foyer while you wait for the evening to begin.</p>
+              <div id="round-timer" class="round-timer" hidden><span>Round ends in</span><strong>—:—</strong></div>
+            </aside>
+
+            <aside class="mini-map glass-panel" aria-label="Estate map">
+              <div class="mini-map-heading">
+                <div><span class="micro-label">You are here</span><h2>Grand Foyer</h2></div>
+                <button type="button" data-view-target="casefile" aria-label="Open estate details">↗</button>
+              </div>
+              <div class="floorplan" aria-hidden="true">
+                <span class="map-room map-library">Library</span>
+                <span class="map-room map-dining">Dining</span>
+                <span class="map-room map-study">Study</span>
+                <span class="map-room map-ballroom">Ballroom</span>
+                <span class="map-room map-foyer">◆<b>Grand Foyer</b></span>
+                <span class="map-room map-conservatory">Conservatory</span>
+              </div>
+            </aside>
+
+            <div class="scene-wrap" aria-label="Grand Foyer interactive scene">
+              <div class="scene-image" aria-hidden="true"></div>
+              <div class="scene-sheen" aria-hidden="true"></div>
+              <div id="scene-status" class="scene-status"><span aria-hidden="true">✦</span> Select an object to investigate</div>
+
+              <button class="hotspot hotspot-portrait" type="button" data-hotspot="family-portrait" style="--x: 18%; --y: 51%">
+                <span class="hotspot-marker"><i aria-hidden="true">⌕</i></span><span class="hotspot-label">Family portrait</span>
+              </button>
+              <button class="hotspot hotspot-guestbook" type="button" data-hotspot="guest-book" style="--x: 15%; --y: 78%">
+                <span class="hotspot-marker"><i aria-hidden="true">⌕</i></span><span class="hotspot-label">Guest book</span>
+              </button>
+              <button class="hotspot hotspot-roses" type="button" data-hotspot="rose-arrangement" style="--x: 50%; --y: 58%">
+                <span class="hotspot-marker"><i aria-hidden="true">⌕</i></span><span class="hotspot-label">Red rose arrangement</span>
+              </button>
+              <button class="hotspot hotspot-statue" type="button" data-hotspot="marble-statue" style="--x: 76%; --y: 49%">
+                <span class="hotspot-marker"><i aria-hidden="true">⌕</i></span><span class="hotspot-label">Marble statue</span>
+              </button>
+              <button class="hotspot hotspot-books" type="button" data-hotspot="books" style="--x: 78%; --y: 78%">
+                <span class="hotspot-marker"><i aria-hidden="true">⌕</i></span><span class="hotspot-label">Leather books</span>
+              </button>
+              <button class="hotspot hotspot-door is-locked" type="button" data-hotspot="study-door" style="--x: 66%; --y: 54%">
+                <span class="hotspot-marker"><i aria-hidden="true">♙</i></span><span class="hotspot-label">Private study <small id="study-door-status">Locked</small></span>
+              </button>
+            </div>
+
+            <aside class="objectives-card glass-panel">
+              <div class="section-heading compact"><div><span class="micro-label">Tonight's work</span><h2>Objectives</h2></div><strong id="objective-count">0/3</strong></div>
+              <ul id="objective-list" class="objective-list">
+                <li data-objective="inspect"><span></span><p>Investigate three objects in the Grand Foyer.</p></li>
+                <li data-objective="key"><span></span><p>Find a way into the private study.</p></li>
+                <li data-objective="secret"><span></span><p>Protect your character's secret.</p></li>
+              </ul>
+            </aside>
+          </div>
+
+          <div class="room-dock" aria-label="Estate rooms">
+            <button class="room-card is-current" type="button" data-room="foyer"><span class="room-art room-art-foyer"></span><span>Grand Foyer</span><small>Exploring</small></button>
+            <button class="room-card is-locked" type="button" data-room="dining"><span class="room-art room-art-dining"></span><span>Dining Room</span><small>Locked</small></button>
+            <button class="room-card is-locked" type="button" data-room="library"><span class="room-art room-art-library"></span><span>Library</span><small>Locked</small></button>
+            <button class="room-card is-locked" type="button" data-room="study"><span class="room-art room-art-study"></span><span>Private Study</span><small>Requires key</small></button>
+            <button class="room-card is-locked" type="button" data-room="ballroom"><span class="room-art room-art-ballroom"></span><span>Ballroom</span><small>Locked</small></button>
+            <button class="room-card is-locked" type="button" data-room="conservatory"><span class="room-art room-art-conservatory"></span><span>Conservatory</span><small>Locked</small></button>
+          </div>
+
+          <section class="inventory-bar" aria-labelledby="inventory-bar-title">
+            <div class="inventory-heading"><span class="micro-label">Personal collection</span><h2 id="inventory-bar-title">Evidence Inventory</h2></div>
+            <div id="inventory-slots" class="inventory-slots"></div>
+            <button class="inventory-more" type="button" data-view-target="casefile">View case file <span aria-hidden="true">→</span></button>
+          </section>
+        </section>
+
+        <section id="view-casefile" class="view inner-view" data-view="casefile" aria-labelledby="casefile-title" hidden>
+          <header class="view-header">
+            <div><p class="eyebrow">Private & confidential</p><h1 id="casefile-title">My Case File</h1><p>Everything here is visible only to you. Choose carefully what you share.</p></div>
+            <span class="wax-seal" aria-hidden="true">LR</span>
+          </header>
+          <div class="case-grid">
+            <article class="dossier-card paper-card">
+              <div class="dossier-header">
+                <div id="dossier-avatar" class="dossier-avatar">?</div>
+                <div><span class="micro-label">Assigned character</span><h2 id="dossier-name">Awaiting assignment</h2><p id="dossier-archetype">Your host will assign your role.</p></div>
+              </div>
+              <dl class="dossier-facts">
+                <div><dt>Relationship</dt><dd id="dossier-relationship">—</dd></div>
+                <div><dt>Public alibi</dt><dd id="dossier-alibi">—</dd></div>
+              </dl>
+              <section class="secret-panel"><span class="micro-label">For your eyes only</span><h3>Your secret</h3><p id="dossier-secret">No secret has been revealed yet.</p></section>
+              <section><span class="micro-label">Personal objectives</span><ul id="personal-objectives" class="dossier-objectives"><li>Stay observant. Trust no one.</li></ul></section>
+            </article>
+            <section class="evidence-section">
+              <div class="section-heading"><div><p class="eyebrow">Collected in confidence</p><h2>Evidence</h2></div><span id="evidence-total" class="count-pill">0 items</span></div>
+              <div class="evidence-toolbar">
+                <label class="search-field"><span class="sr-only">Search evidence</span><span aria-hidden="true">⌕</span><input id="evidence-search" type="search" placeholder="Search your evidence" /></label>
+                <select id="evidence-filter" aria-label="Filter evidence"><option value="all">All evidence</option><option value="document">Documents</option><option value="object">Objects</option><option value="observation">Observations</option></select>
+              </div>
+              <div id="evidence-grid" class="evidence-grid"></div>
+              <div id="evidence-empty" class="empty-state"><span aria-hidden="true">◇</span><h3>No evidence collected yet</h3><p>Investigate the Grand Foyer to begin building your case.</p><button class="button button-outline" type="button" data-view-target="mansion">Explore the foyer</button></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-messages" class="view inner-view" data-view="messages" aria-labelledby="messages-title" hidden>
+          <header class="view-header slim"><div><p class="eyebrow">Encrypted correspondence</p><h1 id="messages-title">Messages</h1><p>Private notes, group conversations, and anonymous tips.</p></div><button id="anonymous-tip-button" class="button button-outline" type="button">Send anonymous tip</button></header>
+          <div class="messages-layout">
+            <aside class="conversation-list-panel">
+              <div class="section-heading compact"><h2>Conversations</h2><button id="new-message-button" type="button" aria-label="Start a conversation">＋</button></div>
+              <button class="conversation-item is-active" type="button" data-channel="group"><span class="conversation-avatar">♜</span><span><strong>All Guests</strong><small>The drawing room</small></span></button>
+              <div id="direct-conversations"></div>
+            </aside>
+            <section class="thread-panel" aria-label="Conversation">
+              <header><div><span id="thread-avatar" class="conversation-avatar">♜</span><div><h2 id="thread-name">All Guests</h2><p id="thread-status">Group conversation</p></div></div><button id="refresh-messages-button" type="button" aria-label="Refresh messages">↻</button></header>
+              <div id="message-thread" class="message-thread" aria-live="polite"></div>
+              <form id="message-form" class="message-composer">
+                <label class="sr-only" for="message-input">Write a message</label>
+                <textarea id="message-input" rows="1" maxlength="1000" placeholder="Write a discreet message…" required></textarea>
+                <button type="submit" aria-label="Send message">↑</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-suspects" class="view inner-view" data-view="suspects" aria-labelledby="suspects-title" hidden>
+          <header class="view-header slim"><div><p class="eyebrow">Trust is a dangerous luxury</p><h1 id="suspects-title">Suspect Board</h1><p>Track your private suspicions. Your notes are never shown to the other guests.</p></div><div class="suspicion-legend"><span><i class="low"></i>Watch</span><span><i class="medium"></i>Suspicious</span><span><i class="high"></i>Prime suspect</span></div></header>
+          <div id="suspect-grid" class="suspect-grid"></div>
+          <section id="final-vote-panel" class="final-vote-panel" hidden>
+            <div><span class="micro-label">The final reckoning</span><h2>Cast your accusation</h2><p>This decision is permanent. Choose the person you believe murdered Madame Vivienne.</p></div>
+            <button id="cast-vote-button" class="button button-gold" type="button" disabled>Accuse selected suspect</button>
+          </section>
+        </section>
+
+        <section id="view-journal" class="view inner-view" data-view="journal" aria-labelledby="journal-title" hidden>
+          <header class="view-header slim"><div><p class="eyebrow">Private field notes</p><h1 id="journal-title">Investigation Journal</h1><p>Your notes are saved on this device as you write.</p></div><span id="journal-save-state" class="save-state">All changes saved</span></header>
+          <div class="journal-layout">
+            <aside class="journal-prompts"><h2>Questions to consider</h2><button type="button" data-prompt="Who had the strongest motive to change the inheritance?">Who benefits?</button><button type="button" data-prompt="Which guest's timeline does not add up?">Whose timeline breaks?</button><button type="button" data-prompt="What does the missing jewelry connect?">Why the missing jewelry?</button><button type="button" data-prompt="Evidence I should share — and evidence I should keep secret:">Share or conceal?</button></aside>
+            <div class="journal-page"><div class="journal-date" id="journal-date"></div><label for="journal-text">Notes from tonight</label><textarea id="journal-text" placeholder="Record what you saw, what you heard, and what no one else seems to have noticed…"></textarea><div class="page-number">LaRose Estate · Private Record</div></div>
+          </div>
+        </section>
+
+        <section id="view-players" class="view inner-view" data-view="players" aria-labelledby="players-title" hidden>
+          <header class="view-header slim"><div><p class="eyebrow">The evening's company</p><h1 id="players-title">Guest Lobby</h1><p><span id="player-count">0</span> guests have entered the estate.</p></div><div class="invite-code-card"><span>Private room code</span><strong id="lobby-room-code">—</strong><button type="button" data-copy-code>Copy invitation</button></div></header>
+          <div class="lobby-layout">
+            <section><div class="section-heading"><h2>Guest list</h2><span id="ready-count" class="count-pill">0 ready</span></div><div id="player-grid" class="player-grid"></div></section>
+            <aside class="lobby-rules glass-panel"><span class="micro-label">House rules</span><h2>Before we begin</h2><ol><li>Keep your private dossier secret.</li><li>Evidence may be shared, but the original stays with its finder.</li><li>Roleplay in character; accusations wait for the final phase.</li><li>If disconnected, reopen this device to rejoin automatically.</li></ol></aside>
+          </div>
+        </section>
+
+        <section id="view-host" class="view inner-view" data-view="host" aria-labelledby="host-title" hidden>
+          <header class="view-header slim"><div><p class="eyebrow">Private game master console</p><h1 id="host-title">Host Dashboard</h1><p>Orchestrate the mystery without revealing protected player information.</p></div><span id="host-live-state" class="host-live-state"><i></i> Session live</span></header>
+          <div class="host-layout">
+            <section class="host-main">
+              <article class="control-card"><div class="section-heading"><div><span class="micro-label">Session state</span><h2>Direct the evening</h2></div><span id="host-phase-pill" class="count-pill">Waiting</span></div><div class="host-action-grid"><button type="button" data-host-action="start"><span aria-hidden="true">▶</span><strong>Start game</strong><small>Begin investigation</small></button><button type="button" data-host-action="pause"><span aria-hidden="true">Ⅱ</span><strong>Pause</strong><small>Freeze the timer</small></button><button type="button" data-host-action="next_round"><span aria-hidden="true">→</span><strong>Next phase</strong><small>Advance the story</small></button><button type="button" data-host-action="unlock_study"><span aria-hidden="true">♙</span><strong>Unlock study</strong><small>Open for all guests</small></button><button type="button" data-host-action="release_clue"><span aria-hidden="true">◇</span><strong>Release clue</strong><small>Send a GM hint</small></button><button class="danger" type="button" data-host-action="begin_accusation"><span aria-hidden="true">!</span><strong>Final accusations</strong><small>Open the vote</small></button></div></article>
+              <article class="control-card"><div class="section-heading"><div><span class="micro-label">Round clock</span><h2>Investigation Timer</h2></div><strong id="host-timer-display" class="large-timer">15:00</strong></div><div class="timer-controls"><label>Minutes<input id="timer-minutes" type="number" min="1" max="120" value="15" /></label><button class="button button-outline" type="button" data-host-action="start_timer">Start timer</button><button class="button button-ghost" type="button" data-host-action="stop_timer">Stop</button></div></article>
+              <article class="control-card reveal-card"><div><span class="micro-label">Endgame</span><h2>Reveal the truth</h2><p>Only trigger this after accusations are locked. The murderer and the complete solution will be revealed to everyone.</p></div><button class="button button-danger" type="button" data-host-action="reveal">Reveal murderer</button></article>
+            </section>
+            <aside class="host-sidebar"><article class="control-card"><div class="section-heading compact"><h2>Live guests</h2><span id="host-player-count" class="count-pill">0 online</span></div><div id="host-player-list" class="host-player-list"></div></article><article class="control-card"><span class="micro-label">Quick share</span><h2>Invitation</h2><div class="large-code" id="host-room-code">—</div><button class="button button-outline button-full" type="button" data-copy-code>Copy room code</button></article></aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="evidence-dialog" class="modal evidence-dialog">
+      <button class="modal-close" type="button" data-close-dialog aria-label="Close">×</button>
+      <div id="evidence-reveal-burst" class="reveal-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><span>✦</span></div>
+      <div id="inspection-visual" class="inspection-visual"><span id="inspection-icon" aria-hidden="true">◇</span></div>
+      <div class="modal-body">
+        <p id="inspection-kicker" class="eyebrow">Close inspection</p>
+        <h2 id="inspection-title">Object</h2>
+        <p id="inspection-description">You study the object carefully.</p>
+        <div id="evidence-found" class="evidence-found" hidden><span class="micro-label">Evidence discovered</span><h3 id="evidence-title">New evidence</h3><p id="evidence-description"></p><div class="evidence-meta"><span id="evidence-type">Observation</span><span id="evidence-visibility">Private to you</span></div></div>
+        <div id="inspection-already" class="inspection-already" hidden><span aria-hidden="true">✓</span> You have already investigated this object.</div>
+        <div class="modal-actions"><button id="study-unlock-button" class="button button-gold" type="button" hidden>Use brass key</button><button class="button button-outline" type="button" data-close-dialog>Return to foyer</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="simple-dialog" class="modal simple-dialog">
+      <button class="modal-close" type="button" data-close-dialog aria-label="Close">×</button>
+      <div class="modal-body"><p id="simple-kicker" class="eyebrow">LaRose Estate</p><h2 id="simple-title">Notice</h2><div id="simple-content"></div><div id="simple-actions" class="modal-actions"></div></div>
+    </dialog>
+
+    <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
