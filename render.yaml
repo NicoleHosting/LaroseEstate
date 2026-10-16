@@ -2,7 +2,7 @@ services:
   - type: web
     name: the-larose-files
     runtime: node
-    plan: 0.5c-512mb
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -19,14 +19,10 @@ services:
           name: larose-files-db
           property: connectionString
       - key: UPLOAD_DIR
-        value: /var/data/uploads
-    disk:
-      name: larose-uploads
-      mountPath: /var/data
-      sizeGB: 1
+        value: /tmp/larose-uploads
 
 databases:
   - name: larose-files-db
-    plan: 0.1c-256mb
+    plan: free
     databaseName: larose_files
     user: larose
