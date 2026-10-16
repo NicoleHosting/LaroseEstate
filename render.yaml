@@ -2,7 +2,7 @@ services:
   - type: web
     name: the-larose-files
     runtime: node
-    plan: starter
+    plan: 0.5c-512mb
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -27,6 +27,6 @@ services:
 
 databases:
   - name: larose-files-db
-    plan: starter
+    plan: 0.1c-256mb
     databaseName: larose_files
     user: larose
