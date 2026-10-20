@@ -12,7 +12,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test --test-concurrency=1",
-    "check": "node --check src/server.js && node --check src/store.js && node --check src/content.js && node --check public/app.js"
+    "check": "node --check src/server.js && node --check src/store.js && node --check src/content.js && node --check src/lib/director.js && node --check src/lib/game-service.js && node --check public/app.js"
   },
   "dependencies": {
     "express": "^4.21.2",

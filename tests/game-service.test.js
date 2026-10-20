@@ -28,8 +28,10 @@ async function createFixture(t) {
 }
 
 test('public configuration and peer views do not leak private dossiers or the solution', async (t) => {
-  const { game, created } = await createFixture(t);
-  await game.assignCharacter(created.player.id, created.player.id, 'lucien-larose');
+  const { game, store, created } = await createFixture(t);
+  const sealed = (await store.read()).mysteries[created.session.id];
+  const culprit = await game.joinSession(created.session.code, { displayName: 'Private Culprit' });
+  await game.assignCharacter(created.player.id, culprit.player.id, sealed.murdererId);
 
   const config = game.publicConfig();
   const serializedConfig = JSON.stringify(config);
@@ -38,7 +40,7 @@ test('public configuration and peer views do not leak private dossiers or the so
   assert.doesNotMatch(serializedConfig, /murdererId|You murdered Vivienne|oleander concentrate/i);
   assert.ok(config.characters.every((character) => !('secret' in character) && !('dossier' in character)));
 
-  const snapshot = await game.snapshot(created.player.id);
+  const snapshot = await game.snapshot(culprit.player.id);
   assert.match(snapshot.me.character.secret, /murdered Vivienne/i);
   assert.ok(snapshot.characters.every((character) => !('secret' in character) && !('objectives' in character)));
   assert.ok(snapshot.players.every((player) => !('secret' in (player.character ?? {}))));
@@ -46,7 +48,7 @@ test('public configuration and peer views do not leak private dossiers or the so
 
 test('the foyer key loop is server-authoritative, idempotent, and unlocks only the study', async (t) => {
   const { game, created } = await createFixture(t);
-  await game.assignCharacter(created.player.id, created.player.id, 'amara-vale');
+  await game.assignCharacter(created.player.id, created.player.id, 'nicole-larose');
   await game.setGameControls(created.player.id, { action: 'start' });
 
   await assert.rejects(
@@ -75,11 +77,12 @@ test('the foyer key loop is server-authoritative, idempotent, and unlocks only t
 
 test('character-specific discoveries are private and award only that role bonus', async (t) => {
   const { game, created } = await createFixture(t);
-  await game.assignCharacter(created.player.id, created.player.id, 'darius-king');
+  const joined = await game.joinSession(created.session.code, { displayName: 'Darius Player' });
+  await game.assignCharacter(created.player.id, joined.player.id, 'darius-king');
   await game.setGameControls(created.player.id, { action: 'start' });
 
-  await game.investigate(created.player.id, 'books');
-  const doorResult = await game.investigate(created.player.id, 'study-door');
+  await game.investigate(joined.player.id, 'books');
+  const doorResult = await game.investigate(joined.player.id, 'study-door');
   assert.match(doorResult.narrative, /cane case/i);
   assert.deepEqual(
     new Set(doorResult.evidence.map((item) => item.id)),
@@ -89,7 +92,7 @@ test('character-specific discoveries are private and award only that role bonus'
 
 test('sharing evidence copies it without removing or duplicating the original', async (t) => {
   const { game, created } = await createFixture(t);
-  await game.assignCharacter(created.player.id, created.player.id, 'amara-vale');
+  await game.assignCharacter(created.player.id, created.player.id, 'nicole-larose');
   const joined = await game.joinSession(created.session.code, { displayName: 'Second Player' });
   await game.setGameControls(created.player.id, { action: 'start' });
   await game.investigate(created.player.id, 'books');
@@ -112,10 +115,12 @@ test('saved progress and bearer sessions survive a store restart', async (t) => 
   let store = await createStore({ dataFile });
   let game = new GameService(store, { sessionSecret: TEST_SECRET });
   const created = await game.createSession({ displayName: 'Returning Host' });
-  await game.assignCharacter(created.player.id, created.player.id, 'amara-vale');
+  await game.assignCharacter(created.player.id, created.player.id, 'nicole-larose');
   await game.setGameControls(created.player.id, { action: 'start' });
   await game.investigate(created.player.id, 'books');
   await game.addJournalEntry(created.player.id, 'The study key was hidden in the books.');
+  const avatarData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('base64');
+  await game.setAvatar(created.player.id, { mimeType: 'image/png', data: avatarData });
   await store.close();
 
   store = await createStore({ dataFile });
@@ -125,6 +130,8 @@ test('saved progress and bearer sessions survive a store restart', async (t) => 
   const snapshot = await game.snapshot(authenticated.player.id);
   assert.ok(snapshot.me.evidence.some((item) => item.id === 'brass-study-key'));
   assert.equal(snapshot.me.journal[0].text, 'The study key was hidden in the books.');
+  assert.match(snapshot.me.avatarUrl, new RegExp(`/api/avatars/${created.player.id}`));
+  assert.deepEqual(await game.avatarAsset(created.player.id), { mimeType: 'image/png', data: avatarData });
 
   t.after(async () => {
     await store.close();
@@ -132,21 +139,22 @@ test('saved progress and bearer sessions survive a store restart', async (t) => 
   });
 });
 
-test('final accusations reveal the predetermined murderer and a complete solution', async (t) => {
-  const { game, created } = await createFixture(t);
-  await game.assignCharacter(created.player.id, created.player.id, 'amara-vale');
+test('final accusations reveal the session\'s sealed murderer and a complete solution', async (t) => {
+  const { game, store, created } = await createFixture(t);
+  await game.assignCharacter(created.player.id, created.player.id, 'nicole-larose');
   await game.setGameControls(created.player.id, { action: 'start' });
   await game.setGameControls(created.player.id, { action: 'open-accusations' });
+  const sealed = (await store.read()).mysteries[created.session.id];
   await game.submitAccusation(created.player.id, {
-    suspectCharacterId: 'lucien-larose',
-    theory: 'The audit, oleander, altered arrival, and duplicate key point to Lucien.',
+    suspectCharacterId: sealed.murdererId,
+    theory: 'The audit, oleander, altered arrival, and duplicate key establish the culprit.',
   });
 
   const reveal = await game.revealSolution(created.player.id);
-  assert.equal(reveal.murderer.id, 'lucien-larose');
-  assert.match(reveal.summary, /audit/i);
+  assert.equal(reveal.murderer.id, sealed.murdererId);
+  assert.match(reveal.summary, /audit|trial|vineyard/i);
   assert.match(reveal.summary, /oleander/i);
   assert.deepEqual(reveal.correctPlayerIds, [created.player.id]);
-  assert.equal(reveal.tally['lucien-larose'], 1);
+  assert.ok(reveal.tally[sealed.murdererId] >= 1, 'the human vote remains in the tally beside autonomous NPC votes');
 });
 

@@ -28,6 +28,9 @@ test('the flexible roster has twenty complete, unique characters and no Hassan',
   assert.equal(GAME.maxPlayers, 20);
   assertUniqueIds(CHARACTERS, 'character');
   assert.doesNotMatch(JSON.stringify(CHARACTERS), /hassan/i);
+  assert.ok(CHARACTERS.some((character) => character.id === 'nicole-larose'));
+  assert.ok(CHARACTERS.every((character) => character.id !== 'amara-vale'));
+  assert.equal(getCharacter('amara-vale').id, 'nicole-larose', 'legacy Amara saves must resolve to Nicole');
 
   const characterIds = new Set(CHARACTERS.map((character) => character.id));
   const evidenceIds = new Set(EVIDENCE.map((item) => item.id));
@@ -52,6 +55,7 @@ test('the murderer is predetermined, unique, and present in every legal roster',
   const murderers = CHARACTERS.filter((character) => character.alignment === 'murderer');
   assert.equal(murderers.length, 1);
   assert.equal(murderers[0].id, STORY.murdererId);
+  assert.notEqual(STORY.murdererId, 'nicole-larose');
   assert.ok(CHARACTERS.slice(0, GAME.minPlayers).some((character) => character.id === STORY.murdererId));
 
   for (let count = GAME.minPlayers; count <= GAME.maxPlayers; count += 1) {
@@ -160,11 +164,11 @@ test('every character gets at least one private hotspot insight without seeing a
   assert.deepEqual(darius.evidenceIds.sort(), ['black-seal-wax', 'duplicate-key-scratches']);
   assert.match(darius.narrative, /wax flake/i);
 
-  const amara = getDiscoveryForRole('study-door', 'amara-vale');
-  assert.equal(amara.isRoleSpecific, false);
-  assert.deepEqual(amara.evidenceIds, ['duplicate-key-scratches']);
-  assert.doesNotMatch(amara.narrative, /Darius|cane case/i);
-  assert.equal(getDiscoveryForRole('not-a-hotspot', 'amara-vale'), null);
+  const nicole = getDiscoveryForRole('study-door', 'nicole-larose');
+  assert.equal(nicole.isRoleSpecific, false);
+  assert.deepEqual(nicole.evidenceIds, ['duplicate-key-scratches']);
+  assert.doesNotMatch(nicole.narrative, /Darius|cane case/i);
+  assert.equal(getDiscoveryForRole('not-a-hotspot', 'nicole-larose'), null);
 });
 
 test('the evidence catalog supports a solvable case and clearly labels red herrings', () => {

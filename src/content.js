@@ -110,8 +110,8 @@ export const STORY = Object.freeze({
 
 export const CHARACTERS = Object.freeze([
   {
-    id: "amara-vale",
-    name: "Amara Vale",
+    id: "nicole-larose",
+    name: "Nicole LaRose",
     title: "The Socialite",
     pronouns: "she/her",
     tier: "core",
@@ -266,7 +266,7 @@ export const CHARACTERS = Object.freeze([
     objectives: ["Prove whether trust funds were diverted.", "Protect your source until corroborating evidence exists.", "Publish the truth without sacrificing an innocent person."],
     relationships: {
       "malcolm-graves": "Your frightened source inside the family bank.",
-      "amara-vale": "A cousin and friend who sometimes treats facts as accessories.",
+      "nicole-larose": "A cousin and friend who sometimes treats facts as accessories.",
       "lucien-larose": "Your uncle threatened legal action over your questions.",
     },
     knowledge: ["Account code L-7 appears in multiple unexplained transfers."],
@@ -281,11 +281,11 @@ export const CHARACTERS = Object.freeze([
     alignment: "innocent",
     publicBio: "A polished dealer retained to catalogue the estate collection before the will changed hands.",
     dossier: "The missing Widow's Ruby makes you look like the obvious thief, especially because you recently arranged a discreet appraisal.",
-    secret: "You and Amara were once lovers. Tonight she asked you to trace the blackmailer holding her photograph.",
-    alibi: "You were arguing with Amara on the ballroom terrace during the murder, but confirming it exposes both of you.",
-    objectives: ["Locate the Widow's Ruby or prove its authorized removal.", "Protect Amara's confidence.", "Identify who requested the secret appraisal."],
+    secret: "You and Nicole were once lovers. Tonight she asked you to trace the blackmailer holding her photograph.",
+    alibi: "You were arguing with Nicole on the ballroom terrace during the murder, but confirming it exposes both of you.",
+    objectives: ["Locate the Widow's Ruby or prove its authorized removal.", "Protect Nicole's confidence.", "Identify who requested the secret appraisal."],
     relationships: {
-      "amara-vale": "Your former lover and current confidante.",
+      "nicole-larose": "Your former lover and current confidante.",
       "rafael-saint-clair": "A professional rival who can verify your appraisal records.",
       "opal-larose": "She commissioned the appraisal under an alias." ,
     },
@@ -1049,7 +1049,7 @@ export const HOTSPOTS = Object.freeze([
         ["portrait-warning"],
         "What could 'the sword behind the rose' identify?"
       ),
-      "amara-vale": discovery("You recognize 'ink denies' as Vivienne's phrase for forged signatures. She used it after studying Lucien's paperwork."),
+      "nicole-larose": discovery("You recognize 'ink denies' as Vivienne's phrase for forged signatures. She used it after studying the estate's disputed paperwork."),
       "lucien-larose": discovery("You recognize the warning as the message you failed to find earlier. Its reference to your rose-and-sword seal is dangerously precise."),
       "genevieve-larose": discovery("The backing paper is cut from the old family registry—the same version that once listed Marcus's mother."),
       "marcus-reeve": discovery("Architect's pencil marks show a shallow compartment continues behind the frame; the murder note is not the only thing hidden here."),
@@ -1178,7 +1178,8 @@ export const HOTSPOTS = Object.freeze([
 const byId = (items, id) => items.find((item) => item.id === id) ?? null;
 
 export function getCharacter(characterId) {
-  return byId(CHARACTERS, characterId);
+  const normalizedId = characterId === "amara-vale" ? "nicole-larose" : characterId;
+  return byId(CHARACTERS, normalizedId);
 }
 
 export function getRoom(roomId) {
@@ -1201,13 +1202,15 @@ export function getDiscoveryForRole(hotspotId, characterId) {
   const hotspot = getHotspot(hotspotId);
   if (!hotspot) return null;
 
+  const normalizedCharacterId = characterId === "amara-vale" ? "nicole-larose" : characterId;
+
   const common = hotspot.discoveries.default;
-  const personal = hotspot.discoveries[characterId];
+  const personal = hotspot.discoveries[normalizedCharacterId];
   const evidenceIds = [...new Set([...(common.evidenceIds ?? []), ...(personal?.evidenceIds ?? [])])];
 
   return {
     hotspotId,
-    characterId,
+    characterId: normalizedCharacterId,
     title: hotspot.name,
     narrative: personal ? `${common.narrative}\n\n${personal.narrative}` : common.narrative,
     evidenceIds,

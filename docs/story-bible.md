@@ -2,21 +2,23 @@
 
 ## Game-master story bible — spoilers
 
-This document contains the murderer, method, private character secrets, and final proof. It is for the game master and development team. Do not distribute it to players.
+This document contains every possible murderer, method, private character secret, and final proof. It is a development reference. The live game is hostless, and neither Nicole nor the normal administrator view may read the selected solution before the reveal.
 
 ## Canon
 
 - Victim: Madame Vivienne LaRose, matriarch and trustee.
-- Murderer: Lucien LaRose (`lucien-larose`), Vivienne's eldest son, family solicitor, and presumed executor.
-- Motive: Vivienne found that Lucien had diverted charitable-trust money through account L-7 to cover private debts. A new codicil removed him as executor, and an audit at 08:00 the next morning would expose him.
-- Method: Lucien concentrated oleander from the conservatory, carried the phial and a rough duplicate key inside his hollow walking cane, entered the private study, and dosed Vivienne's blackcurrant cordial. The poison caused a fatal arrhythmia.
-- Locked-room device: The untouched emergency key was hidden in a foyer book. Lucien used a duplicate cut from a missing impression kit and locked the door when he left. That duplicate left a rough second track in the lock.
-- Cover-up: Lucien changed his guest-book time from 19:18 to 19:48 and tried to burn the trust ledger page connecting him to L-7.
-- Final proof: The altered arrival impression establishes opportunity; the audit letter, ledger fragment, and codicil establish motive; the glass and phial establish oleander as the means; and the duplicate-key scoring, brass filings, and matching black rose-and-sword wax identify Lucien.
+- Sealed scenarios: the server selects `trust-audit` (Lucien), `physicians-reckoning` (Celeste), or `vintners-debt` (Dominic) independently for each session.
+- Shared method: oleander concentrate is added to Vivienne's blackcurrant cordial, and a rough duplicate key creates the locked-room illusion.
+- Scenario motive: the morning audit exposes trust theft, an unauthorized cardiac trial, or fraudulent vineyard loans.
+- Cover-up: the selected culprit alters their 19:18 arrival to 19:48 and burns the ledger page tied to their scandal.
+- Final proof: altered arrival establishes opportunity; scenario-specific audit and ledger records establish motive; glass and phial establish means; duplicate-key damage plus scenario-specific wax and filings identify the culprit.
+- Nicole LaRose is never eligible to be the murderer.
 
 No single discovery should solve the case. The intended solution requires at least one item from each of motive, opportunity, means, and identity.
 
 ## The fair-play chain
+
+The table below shows the `trust-audit` wording. The other two scenarios use the same evidence graph with server-only overlays for the physician or vineyard trail. No client receives unused variants.
 
 | Question | Early lead | Corroboration | Decisive proof |
 | --- | --- | --- | --- |
@@ -28,7 +30,9 @@ No single discovery should solve the case. The intended solution requires at lea
 
 The `portrait-warning` phrase “the sword hides behind the rose” points to Lucien's private emblem only after a player sees the wax. Before then it should read as atmosphere, not a direct accusation.
 
-## Canonical timeline
+## Canonical timeline — `trust-audit`
+
+`physicians-reckoning` and `vintners-debt` replace the named culprit, arrival artifact, audit target, ledger, duplicate-key provenance, and wax trail while preserving the 20:21–20:26 murder window.
 
 | Time | Event | What players may prove |
 | --- | --- | --- |
@@ -47,7 +51,7 @@ The `portrait-warning` phrase “the sword hides behind the rose” points to Lu
 
 Times are fixed canon. Character improvisation may fill gaps but must not move the murder outside 20:21–20:26.
 
-## Red herrings and their resolutions
+## `trust-audit` red herrings and their resolutions
 
 ### The missing Widow's Ruby
 
@@ -67,19 +71,19 @@ They met secretly around the murder window to discuss an erased adoption and a p
 
 Red herrings should cost time and provoke conversation, but each has a concrete exculpatory resolution. Do not leave an innocent character permanently dependent on “trust me.”
 
-## Flexible cast, 5–20 players
+## Flexible cast, 5–20 humans plus NPC support
 
-Character order in `src/content.js` is assignment order. The first five form the minimum viable cast and always include the murderer.
+Character order in `src/content.js` is assignment order. The first five contain Nicole and all three possible culprits. Unclaimed roles can be filled by autonomous NPCs.
 
 | Order | Character | Function in the mystery |
 | ---: | --- | --- |
-| 1 | Amara Vale | Social observer; knows Lucien arrived early and recognizes Vivienne's forgery language. |
-| 2 | Lucien LaRose | Predetermined murderer. |
-| 3 | Dr. Celeste LaRose | Medical interpretation and tonic red herring. |
-| 4 | Dominic LaRose | Debt/threat red herring and family conflict. |
+| 1 | Nicole LaRose | Creator-safe social observer; knows Lucien arrived early and recognizes Vivienne's forgery language. Nicole is always innocent. |
+| 2 | Lucien LaRose | Possible trust-audit culprit; otherwise a major financial red herring. |
+| 3 | Dr. Celeste LaRose | Possible clinical-trial culprit; otherwise medical interpretation and tonic red herring. |
+| 4 | Dominic LaRose | Possible vineyard-loan culprit; otherwise debt/threat red herring. |
 | 5 | Simone Baptiste | Key provenance and estate access. |
 | 6 | Noelle LaRose | Trust-transfer investigation. |
-| 7 | Theo Mercer | Jewel red herring and Amara's alibi. |
+| 7 | Theo Mercer | Jewel red herring and Nicole's alibi. |
 | 8 | Camille Dupré | Cordial provenance and staff perspective. |
 | 9 | Malcolm Graves | Bank corroboration for account L-7. |
 | 10 | Beatrice Laurent | Audit letter and codicil authentication. |
@@ -94,21 +98,21 @@ Character order in `src/content.js` is assignment order. The first five form the
 | 19 | Iris Monroe | Audio timing of the study door. |
 | 20 | Marcus Reeve | Portrait compartment and adoption subplot. |
 
-For small games, the server still exposes the complete physical evidence trail; absent-role knowledge cannot be required for progression. For larger games, private insights make the same objects socially valuable and create reasons to message, ally, and trade copies of evidence.
+For small games, NPCs fill selected unclaimed roles and the server still exposes the complete physical evidence trail; no absent human is required for progression. Larger human groups gain more private insights and reasons to message, ally, and trade evidence.
 
 ## Character direction
 
-All roles are suspects, but only Lucien is instructed to lie about the murder. Innocent players may conceal their personal secrets while answering direct questions about physical evidence truthfully. The game master should intervene if a player invents new evidence, changes a fixed time, claims an impossible alibi, or declares another player an accomplice.
+All roles are suspects, but only the selected culprit receives a murderer overlay and instructions to lie about the murder. Innocent players may conceal personal secrets while treating physical evidence as fixed. The autonomous narrator rejects invented evidence, impossible timing, and accomplices.
 
-Lucien may:
+The selected murderer may:
 
 - deny the 19:18 arrival;
-- argue that “current executor” is ambiguous;
-- point toward Celeste's tonic, Dominic's threat, or the missing jewel;
-- claim the black wax came from ordinary correspondence;
+- dispute the audit or ledger interpretation;
+- point toward unrelated financial, medical, vineyard, or jewel scandals;
+- claim the identifying wax came from ordinary correspondence, prescriptions, or reserve bottles;
 - share, withhold, or trade any evidence he legitimately owns.
 
-Lucien may not:
+The selected murderer may not:
 
 - change the poison, victim, or murder time;
 - claim the physical evidence is fabricated by the game master;
@@ -116,13 +120,13 @@ Lucien may not:
 - invent an accomplice or a second killer;
 - deny that the rose-and-sword seal is his once directly compared.
 
-## Grand Foyer vertical slice
+## Grand Foyer investigation
 
 The foyer is a six-step investigation loop. Five objects yield clues; the sixth consumes the key and opens the next room.
 
 | Hotspot ID | Public interaction | Base evidence | Selected private insight |
 | --- | --- | --- | --- |
-| `family-portrait` | Lift the loose frame latch. | `portrait-warning` | Amara recognizes forgery language; Lucien realizes the emblem reference threatens him; Genevieve and Marcus see the registry subplot. |
+| `family-portrait` | Lift the loose frame latch. | `portrait-warning` | Nicole recognizes forgery language; Lucien realizes the emblem reference threatens him; Genevieve and Marcus see the registry subplot. |
 | `guest-book` | Angle the page and reveal pressure marks. | `altered-arrival-record` | Dominic recognizes Lucien's pen; Noelle authenticates the technique; Darius gets `doorman-time-note`; Adrian connects the camera gap. |
 | `rose-arrangement` | Rotate the vase collar and open the false base. | `sealed-audit-letter` | Simone knows it was a dead drop; Beatrice identifies the executor; Esme gets `floral-oil-trace`; Valentina recognizes the wax compound. |
 | `marble-statue` | Inspect the empty mount and dust. | `missing-widows-ruby` | Theo/Rafael/Opal can resolve the theft story; Malcolm gets `statue-brass-dust`. |
@@ -142,14 +146,14 @@ The implementation merges the common discovery with only the assigned character'
 
 The five clue objects do not need to be solved in a fixed order. Only the door has a hard prerequisite.
 
-## Later-room evidence plan
+## Mansion evidence plan
 
-The first milestone implements the foyer completely. The following evidence is canon even if its room interaction is not yet built:
+The mansion interactions implement the following evidence routes:
 
 - Private Study: `cordial-glass-residue`, `scorched-ledger-fragment`, and `revised-codicil`.
 - Conservatory: `oleander-phial` and a comparison against `conservatory-cutting-log`.
 - Library: the full transfer chain behind `reporters-transfer-notes` and Malcolm's source trail.
-- Ballroom: Amara and Theo's terrace alibi plus Opal's witnesses.
+- Ballroom: Nicole and Theo's terrace alibi plus Opal's witnesses.
 - Dining Room: the announcement timeline and cordial-service handoff.
 - Wine Cellar: Dominic's contract and the nonmatching beverage batch.
 - Chapel Alcove: Genevieve and Marcus's adoption record, resolving their evasive alibi.
@@ -158,30 +162,32 @@ The first milestone implements the foyer completely. The following evidence is c
 
 Players vote for a character and may submit a written theory. A fully supported theory identifies:
 
-1. Lucien as murderer;
-2. trust theft and the morning audit as motive;
+1. the session's selected murderer;
+2. the matching audit scandal as motive;
 3. oleander in the cordial as method;
 4. the duplicate key as the locked-room mechanism;
 5. the altered guest book and burned ledger as cover-up.
 
-The host reveal should first show the vote tally, then walk through motive, opportunity, means, and identity in that order. Resolve each red herring before the final confession so innocent players understand why their secrets mattered without making them killers.
+The automatic reveal shows the vote tally, then walks through motive, opportunity, means, and identity. It is followed by a reunion receipt for every participant and log-derived Golden Rose awards.
 
 ## Information boundaries
 
 - Public: names, titles, public biographies, room names, hotspot labels, and already discovered evidence.
 - Private to an assigned player: dossier, secret, objectives, relationships, starting evidence, journal, messages, inventory, and character-specific hotspot text.
-- Host only until reveal: `STORY.murdererId`, solution text, all secrets, all role discoveries, and undiscovered evidence metadata.
+- Server only until reveal: selected scenario, murderer, motive, method, timeline, unused variants, and undiscovered evidence metadata. The normal administrator view is not an exception.
 - Never use the client to decide whether a key unlocks a room, whether a clue was earned, or whether a final accusation is correct.
 - A shared clue is a copy. Sharing never transfers ownership or deletes the source record.
 
 ## Continuity rules
 
-- The murderer is always Lucien; there is no randomized-killer mode in this story.
+- The murderer is selected once per session from Lucien, Celeste, or Dominic and never changes afterward.
 - Hassan is not a character and must never be introduced as a substitute role.
 - Vivienne is already dead when active investigation begins.
 - Oleander is the only fatal poison. Celeste's hawthorn tonic is harmless.
 - The original brass study key is hidden at 18:45 and remains unused until players find it.
 - The Widow's Ruby subplot is unrelated to the murder.
-- Lucien acts alone.
+- The selected culprit acts alone.
 - Canonical IDs in `src/content.js` are stable persistence keys and should not be renamed after sessions have been created.
+- `amara-vale` is a legacy persistence alias that resolves to `nicole-larose`; it is not offered as a separate public character.
+- Nicole LaRose is the creator's participant role and must never be selected as the murderer.
 

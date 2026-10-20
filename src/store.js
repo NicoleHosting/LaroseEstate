@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const SOURCE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = path.join(SOURCE_DIR, 'schema.sql');
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export function createInitialState() {
   return {
@@ -17,6 +17,12 @@ export function createInitialState() {
     messages: {},
     investigations: {},
     accusations: {},
+    mysteries: {},
+    npcs: {},
+    confessionals: {},
+    evidenceActions: {},
+    interactionProgress: {},
+    engineEvents: {},
     audit: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -31,7 +37,20 @@ function normalizeState(value) {
   const base = createInitialState();
   if (!value || typeof value !== 'object' || Array.isArray(value)) return base;
   const state = { ...base, ...value };
-  for (const key of ['sessions', 'players', 'tokens', 'messages', 'investigations', 'accusations']) {
+  for (const key of [
+    'sessions',
+    'players',
+    'tokens',
+    'messages',
+    'investigations',
+    'accusations',
+    'mysteries',
+    'npcs',
+    'confessionals',
+    'evidenceActions',
+    'interactionProgress',
+    'engineEvents',
+  ]) {
     if (!state[key] || typeof state[key] !== 'object' || Array.isArray(state[key])) state[key] = {};
   }
   if (!Array.isArray(state.audit)) state.audit = [];

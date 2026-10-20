@@ -94,7 +94,7 @@
               required
             />
             <label class="field-label" for="display-name">Display name</label>
-            <input id="display-name" name="displayName" type="text" maxlength="32" placeholder="Amara" required />
+            <input id="display-name" name="displayName" type="text" maxlength="32" placeholder="Your name" required />
             <label class="field-label" for="avatar-upload">Portrait <span>(optional)</span></label>
             <label class="file-picker" for="avatar-upload">
               <span id="avatar-preview" class="avatar-preview" aria-hidden="true">+</span>
@@ -110,12 +110,12 @@
         <form id="host-form" class="entry-form" autocomplete="on" hidden>
           <div id="host-panel" role="tabpanel" aria-labelledby="host-tab">
             <div class="form-heading">
-              <p class="eyebrow">Game master access</p>
+              <p class="eyebrow">Create a private session</p>
               <h2>Open the house</h2>
-              <p>Create a private session, invite 5–20 guests, and direct the evening in real time.</p>
+              <p>Create a private session for 5–20 guests. The Estate Narrator will run the evening automatically.</p>
             </div>
             <label class="field-label" for="host-name">Your name</label>
-            <input id="host-name" name="hostName" type="text" maxlength="32" placeholder="Madame Host" required />
+            <input id="host-name" name="hostName" type="text" maxlength="32" placeholder="Nicole" required />
             <label class="field-label" for="event-name">Evening title</label>
             <input id="event-name" name="eventName" type="text" maxlength="60" value="A Night at LaRose Estate" required />
             <button class="button button-gold button-full" type="submit">
@@ -142,6 +142,9 @@
           <button class="nav-item is-active" type="button" data-view-target="mansion" aria-current="page">
             <span class="nav-icon" aria-hidden="true">⌂</span><span>Mansion</span>
           </button>
+          <button class="nav-item" type="button" data-view-target="live">
+            <span class="nav-icon" aria-hidden="true">✦</span><span>Tonight</span><span id="confessional-badge" class="nav-badge" hidden>!</span>
+          </button>
           <button class="nav-item" type="button" data-view-target="casefile">
             <span class="nav-icon" aria-hidden="true">▱</span><span>Case file</span>
           </button>
@@ -158,7 +161,7 @@
             <span class="nav-icon" aria-hidden="true">♧</span><span>Guests</span>
           </button>
           <button id="host-nav-button" class="nav-item host-only" type="button" data-view-target="host" hidden>
-            <span class="nav-icon" aria-hidden="true">⚜</span><span>Host</span>
+            <span class="nav-icon" aria-hidden="true">⚜</span><span>Admin</span>
           </button>
         </nav>
 
@@ -189,13 +192,15 @@
                 <span id="connection-status" class="connection-status"><i></i> Live</span>
               </div>
               <ol id="phase-track" class="phase-track" aria-label="Game progress">
-                <li class="is-current"><span>1</span><small>Gather</small></li>
-                <li><span>2</span><small>Investigate</small></li>
-                <li><span>3</span><small>Interrogate</small></li>
-                <li><span>4</span><small>Accuse</small></li>
-                <li><span>5</span><small>Reveal</small></li>
+                <li class="is-current"><span>1</span><small>Gathering</small></li>
+                <li><span>2</span><small>Murder</small></li>
+                <li><span>3</span><small>Investigation</small></li>
+                <li><span>4</span><small>Betrayal</small></li>
+                <li><span>5</span><small>Accusations</small></li>
               </ol>
               <p id="phase-description">The guests are assembling. Explore the foyer while you wait for the evening to begin.</p>
+              <div class="act-progress" aria-label="Act progress"><i id="act-progress-fill"></i></div>
+              <p id="next-beat-copy" class="next-beat-copy">The Estate Narrator is preparing the first scene.</p>
               <div id="round-timer" class="round-timer" hidden><span>Round ends in</span><strong>—:—</strong></div>
             </aside>
 
@@ -204,14 +209,16 @@
                 <div><span class="micro-label">You are here</span><h2>Grand Foyer</h2></div>
                 <button type="button" data-view-target="casefile" aria-label="Open estate details">↗</button>
               </div>
-              <div class="floorplan" aria-hidden="true">
-                <span class="map-room map-library">Library</span>
-                <span class="map-room map-dining">Dining</span>
-                <span class="map-room map-study">Study</span>
-                <span class="map-room map-ballroom">Ballroom</span>
-                <span class="map-room map-foyer">◆<b>Grand Foyer</b></span>
-                <span class="map-room map-conservatory">Conservatory</span>
-              </div>
+              <nav class="floorplan" aria-label="Choose a room from the estate floor plan">
+                <button class="map-room map-library is-locked" type="button" data-room="library" data-unlock-act="2">Library</button>
+                <button class="map-room map-dining is-locked" type="button" data-room="dining" data-unlock-act="1">Dining</button>
+                <button class="map-room map-chapel is-locked" type="button" data-room="chapel" data-unlock-act="4">Chapel</button>
+                <button class="map-room map-study is-locked" type="button" data-room="study" data-unlock-act="2">Study</button>
+                <button class="map-room map-ballroom is-locked" type="button" data-room="ballroom" data-unlock-act="4">Ballroom</button>
+                <button class="map-room map-cellar is-locked" type="button" data-room="cellar" data-unlock-act="3">Wine Cellar</button>
+                <button class="map-room map-foyer is-current" type="button" data-room="foyer">◆<b>Grand Foyer</b></button>
+                <button class="map-room map-conservatory is-locked" type="button" data-room="conservatory" data-unlock-act="3">Conservatory</button>
+              </nav>
             </aside>
 
             <div class="scene-wrap" aria-label="Grand Foyer interactive scene">
@@ -237,6 +244,11 @@
               <button class="hotspot hotspot-door is-locked" type="button" data-hotspot="study-door" style="--x: 66%; --y: 54%">
                 <span class="hotspot-marker"><i aria-hidden="true">♙</i></span><span class="hotspot-label">Private study <small id="study-door-status">Locked</small></span>
               </button>
+              <button id="narrator-scene-card" class="narrator-scene-card" type="button" data-view-target="live" aria-label="Open tonight's story">
+                <span class="narrator-sigil" aria-hidden="true">LR</span>
+                <span><small>The Estate Narrator</small><strong id="narrator-scene-title">The house is listening</strong><em id="narrator-scene-copy">Tonight's story will unfold here in real time.</em></span>
+                <b aria-hidden="true">→</b>
+              </button>
             </div>
 
             <aside class="objectives-card glass-panel">
@@ -249,19 +261,74 @@
             </aside>
           </div>
 
-          <div class="room-dock" aria-label="Estate rooms">
+          <nav class="room-dock" aria-label="Explore all eight rooms of LaRose Estate">
             <button class="room-card is-current" type="button" data-room="foyer"><span class="room-art room-art-foyer"></span><span>Grand Foyer</span><small>Exploring</small></button>
-            <button class="room-card is-locked" type="button" data-room="dining"><span class="room-art room-art-dining"></span><span>Dining Room</span><small>Locked</small></button>
-            <button class="room-card is-locked" type="button" data-room="library"><span class="room-art room-art-library"></span><span>Library</span><small>Locked</small></button>
-            <button class="room-card is-locked" type="button" data-room="study"><span class="room-art room-art-study"></span><span>Private Study</span><small>Requires key</small></button>
-            <button class="room-card is-locked" type="button" data-room="ballroom"><span class="room-art room-art-ballroom"></span><span>Ballroom</span><small>Locked</small></button>
-            <button class="room-card is-locked" type="button" data-room="conservatory"><span class="room-art room-art-conservatory"></span><span>Conservatory</span><small>Locked</small></button>
-          </div>
+            <button class="room-card is-locked" type="button" data-room="dining" data-unlock-act="1"><span class="room-art room-art-dining"></span><span>Dining Room</span><small>Opens Act I</small></button>
+            <button class="room-card is-locked" type="button" data-room="library" data-unlock-act="2"><span class="room-art room-art-library"></span><span>Library</span><small>Opens Act II</small></button>
+            <button class="room-card is-locked" type="button" data-room="study" data-unlock-act="2"><span class="room-art room-art-study"></span><span>Private Study</span><small>Requires key</small></button>
+            <button class="room-card is-locked" type="button" data-room="conservatory" data-unlock-act="3"><span class="room-art room-art-conservatory"></span><span>Conservatory</span><small>Opens Act III</small></button>
+            <button class="room-card is-locked" type="button" data-room="cellar" data-unlock-act="3"><span class="room-art room-art-cellar"></span><span>Wine Cellar</span><small>Opens Act III</small></button>
+            <button class="room-card is-locked" type="button" data-room="ballroom" data-unlock-act="4"><span class="room-art room-art-ballroom"></span><span>Ballroom</span><small>Opens Act IV</small></button>
+            <button class="room-card is-locked" type="button" data-room="chapel" data-unlock-act="4"><span class="room-art room-art-chapel"></span><span>Chapel Alcove</span><small>Opens Act IV</small></button>
+          </nav>
 
           <section class="inventory-bar" aria-labelledby="inventory-bar-title">
             <div class="inventory-heading"><span class="micro-label">Personal collection</span><h2 id="inventory-bar-title">Evidence Inventory</h2></div>
             <div id="inventory-slots" class="inventory-slots"></div>
             <button class="inventory-more" type="button" data-view-target="casefile">View case file <span aria-hidden="true">→</span></button>
+          </section>
+        </section>
+
+        <section id="view-live" class="view inner-view live-view" data-view="live" aria-labelledby="live-title" hidden>
+          <header class="view-header live-header">
+            <div><p class="eyebrow">Live from LaRose Estate</p><h1 id="live-title">Tonight's Story</h1><p>The Estate Narrator moves every guest through five acts. Public scenes appear here together; your private prompts remain yours alone.</p></div>
+            <div class="autopilot-status"><i></i><span>Autonomous narrator</span><strong id="narrator-mode">Standard pace</strong></div>
+          </header>
+
+          <div class="live-stage-grid">
+            <section class="narrator-stage" aria-labelledby="narrator-stage-title">
+              <div class="stage-curtain" aria-hidden="true"></div>
+              <div class="narrator-mark" aria-hidden="true"><span>LR</span></div>
+              <p class="eyebrow" id="narrator-kicker">Act I · The Family Gathering</p>
+              <h2 id="narrator-stage-title">The invitations have been accepted</h2>
+              <p id="narrator-stage-copy">Candlelight spills over the marble as the LaRose family gathers beneath Vivienne's watchful portrait.</p>
+              <div id="narrator-stage-actions" class="narrator-stage-actions"></div>
+            </section>
+
+            <aside class="act-card glass-panel">
+              <div class="section-heading compact"><div><span class="micro-label">Five-act mystery</span><h2>Evening progress</h2></div><span id="act-number-pill" class="count-pill">Act I</span></div>
+              <ol id="act-list" class="act-list">
+                <li class="is-current"><span>I</span><div><strong>Family Gathering</strong><small>Alliances form.</small></div></li>
+                <li><span>II</span><div><strong>The Murder</strong><small>The house goes dark.</small></div></li>
+                <li><span>III</span><div><strong>Investigation</strong><small>Rooms and motives open.</small></div></li>
+                <li><span>IV</span><div><strong>Betrayal</strong><small>Secrets become weapons.</small></div></li>
+                <li><span>V</span><div><strong>Final Accusations</strong><small>Every theory is sealed.</small></div></li>
+              </ol>
+            </aside>
+          </div>
+
+          <div class="story-columns">
+            <section class="story-panel confessional-panel" aria-labelledby="confessional-title">
+              <div class="section-heading"><div><p class="eyebrow">For the producer's ears only</p><h2 id="confessional-title">Private Confessional</h2></div><span id="confessional-status" class="privacy-chip">Private</span></div>
+              <div id="confessional-content" class="confessional-content">
+                <div class="confessional-empty"><span aria-hidden="true">◉</span><h3>The camera is not rolling yet</h3><p>When the producer calls you in, only you will see the question. Answers stay sealed until the reunion chooses its receipts.</p></div>
+              </div>
+            </section>
+
+            <section class="story-panel timeline-panel" aria-labelledby="timeline-title">
+              <div class="section-heading"><div><p class="eyebrow">Public record</p><h2 id="timeline-title">Tonight's Timeline</h2></div><span id="timeline-count" class="count-pill">0 moments</span></div>
+              <ol id="story-timeline" class="story-timeline"><li class="timeline-empty">The first public moment has not happened yet.</li></ol>
+            </section>
+          </div>
+
+          <section id="reunion-section" class="reunion-section" aria-labelledby="reunion-title">
+            <div class="reunion-lock" id="reunion-lock"><span aria-hidden="true">♙</span><div><p class="eyebrow">After the truth is revealed</p><h2 id="reunion-title">The LaRose Reunion Special</h2><p>Confessional contradictions, betrayals, and verified receipts will unlock here after the final accusation.</p></div></div>
+            <div id="reunion-content" class="reunion-content" hidden></div>
+          </section>
+
+          <section id="awards-section" class="awards-section" aria-labelledby="awards-title">
+            <header><p class="eyebrow">The Golden Rose Awards</p><h2 id="awards-title">Tonight's most unforgettable players</h2><p>Winners are calculated from actual discoveries, deceptions, alliances, and accusations.</p></header>
+            <div id="awards-grid" class="awards-grid"><div class="awards-locked"><span aria-hidden="true">✦</span><p>Awards are sealed until the reunion concludes.</p></div></div>
           </section>
         </section>
 
@@ -274,7 +341,7 @@
             <article class="dossier-card paper-card">
               <div class="dossier-header">
                 <div id="dossier-avatar" class="dossier-avatar">?</div>
-                <div><span class="micro-label">Assigned character</span><h2 id="dossier-name">Awaiting assignment</h2><p id="dossier-archetype">Your host will assign your role.</p></div>
+                <div><span class="micro-label">Assigned character</span><h2 id="dossier-name">Awaiting assignment</h2><p id="dossier-archetype">The Estate Narrator is preparing your role.</p></div>
               </div>
               <dl class="dossier-facts">
                 <div><dt>Relationship</dt><dd id="dossier-relationship">—</dd></div>
@@ -341,10 +408,10 @@
         </section>
 
         <section id="view-host" class="view inner-view" data-view="host" aria-labelledby="host-title" hidden>
-          <header class="view-header slim"><div><p class="eyebrow">Private game master console</p><h1 id="host-title">Host Dashboard</h1><p>Orchestrate the mystery without revealing protected player information.</p></div><span id="host-live-state" class="host-live-state"><i></i> Session live</span></header>
+          <header class="view-header slim"><div><p class="eyebrow">Emergency controls</p><h1 id="host-title">Administrator Dashboard</h1><p>The Estate Narrator runs the mystery. Use these overrides only for recovery and testing; protected solution data remains hidden.</p></div><span id="host-live-state" class="host-live-state"><i></i> Narrator online</span></header>
           <div class="host-layout">
             <section class="host-main">
-              <article class="control-card"><div class="section-heading"><div><span class="micro-label">Session state</span><h2>Direct the evening</h2></div><span id="host-phase-pill" class="count-pill">Waiting</span></div><div class="host-action-grid"><button type="button" data-host-action="start"><span aria-hidden="true">▶</span><strong>Start game</strong><small>Begin investigation</small></button><button type="button" data-host-action="pause"><span aria-hidden="true">Ⅱ</span><strong>Pause</strong><small>Freeze the timer</small></button><button type="button" data-host-action="next_round"><span aria-hidden="true">→</span><strong>Next phase</strong><small>Advance the story</small></button><button type="button" data-host-action="unlock_study"><span aria-hidden="true">♙</span><strong>Unlock study</strong><small>Open for all guests</small></button><button type="button" data-host-action="release_clue"><span aria-hidden="true">◇</span><strong>Release clue</strong><small>Send a GM hint</small></button><button class="danger" type="button" data-host-action="begin_accusation"><span aria-hidden="true">!</span><strong>Final accusations</strong><small>Open the vote</small></button></div></article>
+              <article class="control-card"><div class="section-heading"><div><span class="micro-label">Autonomous session</span><h2>Emergency overrides</h2></div><span id="host-phase-pill" class="count-pill">Waiting</span></div><p class="control-note">Normal play needs no host action. Overrides are recorded in the public timeline.</p><div class="host-action-grid"><button type="button" data-host-action="start"><span aria-hidden="true">▶</span><strong>Start dinner</strong><small>Wake the narrator</small></button><button type="button" data-host-action="pause"><span aria-hidden="true">Ⅱ</span><strong>Pause</strong><small>Freeze progression</small></button><button type="button" data-host-action="next_round"><span aria-hidden="true">→</span><strong>Advance act</strong><small>Emergency skip</small></button><button type="button" data-host-action="trigger_beat"><span aria-hidden="true">✦</span><strong>Trigger beat</strong><small>Move the scene</small></button><button type="button" data-host-action="unlock_study"><span aria-hidden="true">♙</span><strong>Unlock study</strong><small>Recovery override</small></button><button class="danger" type="button" data-host-action="begin_accusation"><span aria-hidden="true">!</span><strong>Open accusations</strong><small>Emergency endgame</small></button></div></article>
               <article class="control-card"><div class="section-heading"><div><span class="micro-label">Round clock</span><h2>Investigation Timer</h2></div><strong id="host-timer-display" class="large-timer">15:00</strong></div><div class="timer-controls"><label>Minutes<input id="timer-minutes" type="number" min="1" max="120" value="15" /></label><button class="button button-outline" type="button" data-host-action="start_timer">Start timer</button><button class="button button-ghost" type="button" data-host-action="stop_timer">Stop</button></div></article>
               <article class="control-card reveal-card"><div><span class="micro-label">Endgame</span><h2>Reveal the truth</h2><p>Only trigger this after accusations are locked. The murderer and the complete solution will be revealed to everyone.</p></div><button class="button button-danger" type="button" data-host-action="reveal">Reveal murderer</button></article>
             </section>
@@ -365,6 +432,15 @@
         <div id="evidence-found" class="evidence-found" hidden><span class="micro-label">Evidence discovered</span><h3 id="evidence-title">New evidence</h3><p id="evidence-description"></p><div class="evidence-meta"><span id="evidence-type">Observation</span><span id="evidence-visibility">Private to you</span></div></div>
         <div id="inspection-already" class="inspection-already" hidden><span aria-hidden="true">✓</span> You have already investigated this object.</div>
         <div class="modal-actions"><button id="study-unlock-button" class="button button-gold" type="button" hidden>Use brass key</button><button class="button button-outline" type="button" data-close-dialog>Return to foyer</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="room-dialog" class="modal room-dialog">
+      <button class="modal-close" type="button" data-close-dialog aria-label="Close room">×</button>
+      <div class="room-dialog-hero"><span id="room-dialog-icon" aria-hidden="true">⌂</span><div><p id="room-dialog-kicker" class="eyebrow">LaRose Estate</p><h2 id="room-dialog-title">Grand Foyer</h2><p id="room-dialog-description">Choose what to examine.</p></div></div>
+      <div class="modal-body">
+        <div id="room-interaction-list" class="room-interaction-list"></div>
+        <div class="modal-actions"><button class="button button-outline" type="button" data-close-dialog>Return to the estate</button></div>
       </div>
     </dialog>
 

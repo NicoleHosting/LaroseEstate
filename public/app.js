@@ -22,6 +22,10 @@
     timerTicker: null,
     simpleActions: new Map(),
     revealShownAt: null,
+    activeRoomId: null,
+    privateConfessionals: null,
+    confessionalsLoading: false,
+    latestNarratorEventId: null,
   };
 
   const hotspotFallback = {
@@ -67,6 +71,80 @@
     clue: "◇",
     medical: "✚",
   };
+
+  const roomAliases = {
+    foyer: "grand-foyer",
+    "grand-foyer": "grand-foyer",
+    dining: "dining-room",
+    "dining-room": "dining-room",
+    library: "library",
+    study: "study",
+    "private-study": "study",
+    ballroom: "ballroom",
+    conservatory: "conservatory",
+    cellar: "wine-cellar",
+    wine: "wine-cellar",
+    "wine-cellar": "wine-cellar",
+    chapel: "chapel-alcove",
+    "chapel-alcove": "chapel-alcove",
+  };
+
+  const roomLabels = {
+    "grand-foyer": "Grand Foyer",
+    "dining-room": "Dining Room",
+    library: "Library",
+    study: "Private Study",
+    ballroom: "Ballroom",
+    conservatory: "Conservatory",
+    "wine-cellar": "Wine Cellar",
+    "chapel-alcove": "Chapel Alcove",
+  };
+
+  const roomUnlockActs = {
+    "grand-foyer": 1,
+    "dining-room": 1,
+    study: 2,
+    library: 2,
+    conservatory: 3,
+    "wine-cellar": 3,
+    ballroom: 4,
+    "chapel-alcove": 4,
+  };
+
+  const actNames = ["Family Gathering", "The Murder", "Investigation", "Betrayal", "Final Accusations"];
+
+  function asArray(value) {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== "object") return [];
+    return Object.values(value).filter((item) => item && typeof item === "object");
+  }
+
+  function roman(value) {
+    return ["I", "II", "III", "IV", "V"][Math.max(1, Math.min(5, Number(value) || 1)) - 1];
+  }
+
+  function currentActIndex() {
+    const session = state.snapshot?.session || {};
+    const explicit = Number(session.actIndex || session.act?.index || session.act);
+    if (Number.isFinite(explicit) && explicit > 0) return Math.max(1, Math.min(5, explicit));
+    return phaseIndex() + 1;
+  }
+
+  function publicParticipants() {
+    const players = (state.snapshot?.players || []).map((player) => ({ ...player, participantType: "human" }));
+    const playerIds = new Set(players.map((player) => player.id));
+    const npcs = asArray(state.snapshot?.npcs).map((npc) => ({
+      ...npc,
+      id: npc.id || npc.characterId,
+      displayName: npc.displayName || npc.name || npc.character?.name || "Estate guest",
+      character: npc.character || { id: npc.characterId || npc.id, name: npc.name || npc.displayName, title: npc.title },
+      avatarUrl: npc.avatarUrl || npc.portrait || npc.character?.portrait,
+      connected: npc.active !== false && npc.status !== "inactive",
+      isNpc: true,
+      participantType: "npc",
+    })).filter((npc) => npc.id && !playerIds.has(npc.id));
+    return [...players, ...npcs];
+  }
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -313,6 +391,7 @@
 
   function enterGame(snapshot) {
     state.snapshot = snapshot;
+    state.privateConfessionals = null;
     rememberSession();
     $("#auth-screen").hidden = true;
     $("#game-shell").hidden = false;
@@ -349,6 +428,7 @@
     try {
       const snapshot = await api("/api/bootstrap");
       state.snapshot = snapshot;
+      if (snapshot.me?.confessionals) state.privateConfessionals = null;
       rememberSession();
       renderAll();
     } catch (error) {
@@ -397,11 +477,42 @@
         if (state.currentView !== "messages") toast("A message arrived", message.anonymous ? "An anonymous note was slipped under the door." : `From ${message.sender?.displayName || "a guest"}.`);
       }
     });
+    socket.on("narrator:event", (event) => {
+      if (!state.snapshot) return;
+      state.snapshot.session = { ...state.snapshot.session, narrator: event };
+      const timeline = state.snapshot.timeline || [];
+      if (event?.id && !timeline.some((item) => item.id === event.id)) state.snapshot.timeline = [...timeline, event];
+      renderStory();
+      if (event?.id !== state.latestNarratorEventId) {
+        state.latestNarratorEventId = event?.id || event?.createdAt || event?.title;
+        toast(event?.title || "The Estate Narrator", event?.summary || event?.text || event?.content || "The story has moved forward.");
+      }
+    });
+    socket.on("act:changed", async () => {
+      toast("A new act begins", "The Estate Narrator has moved the entire house forward.");
+      await refreshState({ quiet: true });
+    });
+    socket.on("confessional:prompt", async () => {
+      toast("The producer wants a word", "A private confessional question is waiting for you.");
+      await refreshState({ quiet: true });
+      renderConfessionals();
+    });
+    socket.on("reunion:started", async () => {
+      toast("The reunion is starting", "The family is back on the velvet couches—and the receipts are ready.");
+      await refreshState({ quiet: true });
+      switchView("live");
+    });
+    socket.on("awards:revealed", async () => {
+      toast("The Golden Rose Awards", "Tonight's winners have been revealed.");
+      await refreshState({ quiet: true });
+      switchView("live");
+    });
     socket.on("game:error", (error) => toast("The estate refused that action", error?.message || "Try again.", "error"));
   }
 
   function receiveSnapshot(snapshot) {
     state.snapshot = snapshot;
+    if (snapshot.me?.confessionals) state.privateConfessionals = null;
     rememberSession();
     renderAll();
   }
@@ -418,6 +529,7 @@
     renderConversations();
     renderMessages();
     renderJournal();
+    renderStory();
     renderHostShell();
     maybeShowReveal();
   }
@@ -431,7 +543,7 @@
     const character = me.character;
     ["#header-room-code", "#lobby-room-code", "#host-room-code"].forEach((selector) => text(selector, session.code));
     text("#profile-name", me.displayName);
-    text("#profile-role", me.isHost ? "Game Master" : character?.name || "Awaiting role");
+    text("#profile-role", character?.name || (me.isHost ? "Administrator" : "Awaiting role"));
     const avatar = $("#profile-avatar");
     avatar.textContent = me.avatarUrl ? "" : initials(me.displayName);
     avatar.style.backgroundImage = me.avatarUrl ? `url("${me.avatarUrl}")` : "";
@@ -440,6 +552,8 @@
 
   function phaseIndex() {
     const session = state.snapshot.session;
+    const act = Number(session.actIndex || session.act?.index || session.act);
+    if (Number.isFinite(act) && act > 0) return Math.max(0, Math.min(4, act - 1));
     if (session.status === "complete" || /reveal/i.test(session.phase)) return 4;
     if (session.finalAccusationOpen || session.status === "accusation" || /accus/i.test(session.phase)) return 3;
     if (/interrog/i.test(session.phase) || session.round >= 3) return 2;
@@ -449,21 +563,42 @@
 
   function renderPhase() {
     const session = state.snapshot.session;
-    text("#phase-name", session.phase || (session.status === "lobby" ? "Waiting Room" : "Investigation"));
+    const actIndex = currentActIndex();
+    const actTitle = session.actTitle || session.act?.title || actNames[actIndex - 1];
+    text("#phase-name", session.status === "lobby" && !session.actIndex ? "Waiting Room" : `Act ${roman(actIndex)} · ${actTitle}`);
     const descriptions = {
-      lobby: "The guests are assembling. Review your dossier while the host prepares the evening.",
-      running: "Explore the estate, collect evidence, and decide which confidences are worth keeping.",
-      paused: "The host has paused the investigation. Use this moment to compare notes.",
+      lobby: "The guests are assembling. Review your dossier while the Estate Narrator prepares the evening.",
+      running: "Explore the estate, follow the narrator's objectives, and decide which confidences are worth keeping.",
+      paused: "The investigation is paused. Use this moment to compare notes.",
       accusation: "Final accusations are open. Review the evidence before naming Vivienne's killer.",
       complete: "The truth has been revealed, but the secrets of LaRose Estate will not be forgotten.",
     };
-    text("#phase-description", descriptions[session.status] || descriptions.running);
+    const narrator = session.narrator || {};
+    text("#phase-description", narrator.summary || narrator.text || session.actDescription || descriptions[session.status] || descriptions.running);
     const index = phaseIndex();
     $$("#phase-track li").forEach((item, itemIndex) => {
       item.classList.toggle("is-complete", itemIndex < index);
       item.classList.toggle("is-current", itemIndex === index);
     });
+    const rawProgress = Number(session.progress?.percent ?? session.progress ?? 0);
+    const progress = rawProgress <= 1 && rawProgress >= 0 ? rawProgress * 100 : rawProgress;
+    const fallbackProgress = session.status === "lobby" ? 0 : (index / 5) * 100;
+    const fill = $("#act-progress-fill");
+    if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number.isFinite(progress) && progress > 0 ? progress : fallbackProgress))}%`;
+    updateNextBeatCopy();
     renderTimer();
+  }
+
+  function updateNextBeatCopy() {
+    const session = state.snapshot?.session || {};
+    const nextBeat = session.nextBeatAt ? new Date(session.nextBeatAt).getTime() : NaN;
+    if (!Number.isFinite(nextBeat)) {
+      text("#next-beat-copy", session.status === "paused" ? "Narrator progression is paused." : "The Estate Narrator is watching the room.");
+      return;
+    }
+    const seconds = Math.max(0, Math.ceil((nextBeat - Date.now()) / 1000));
+    const phrase = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    text("#next-beat-copy", seconds ? `Next story beat in ${phrase}.` : "The next story beat is beginning…");
   }
 
   function renderTimer() {
@@ -478,6 +613,7 @@
       if ($("strong", box)) $("strong", box).textContent = formatted;
       if (hostDisplay) hostDisplay.textContent = formatted;
       box.hidden = timer.status === "idle";
+      updateNextBeatCopy();
     };
     tick();
     if (timer.status === "running") state.timerTicker = window.setInterval(tick, 1000);
@@ -500,13 +636,18 @@
     studyHotspot.classList.toggle("is-locked", !studyUnlocked);
     text("#study-door-status", studyUnlocked ? "Unlocked" : hasEvidence("brass-study-key") ? "Key found" : "Locked");
 
-    const roomAliases = { foyer: "grand-foyer", dining: "dining-room", library: "library", study: "study", ballroom: "ballroom", conservatory: "conservatory" };
-    $$(".room-card").forEach((card) => {
-      const id = roomAliases[card.dataset.room];
+    $$('[data-room]').forEach((card) => {
+      const id = canonicalRoomId(card.dataset.room);
       const unlocked = roomIsUnlocked(id);
       if (id !== "grand-foyer") card.classList.toggle("is-locked", !unlocked);
-      const status = $("small", card);
-      if (status && id !== "grand-foyer") status.textContent = unlocked ? "Unlocked" : id === "study" ? "Requires key" : "Locked";
+      card.setAttribute("aria-label", `${roomLabels[id] || "Estate room"}: ${unlocked ? "open for investigation" : id === "study" ? "locked; find the foyer key" : `opens in Act ${roman(roomUnlockActs[id] || card.dataset.unlockAct || 1)}`}`);
+      const status = card.matches(".room-card") ? $("small", card) : null;
+      const room = roomForKey(id);
+      const openLeads = roomInteractions(room).filter((item) => item.available !== false && !item.completed).length;
+      if (status && id !== "grand-foyer") {
+        const unlockAct = roomUnlockActs[id] || Number(card.dataset.unlockAct) || 1;
+        status.textContent = unlocked ? openLeads ? `${openLeads} lead${openLeads === 1 ? "" : "s"}` : "Unlocked" : id === "study" ? "Requires key" : `Opens Act ${roman(unlockAct)}`;
+      }
     });
 
     const evidence = state.snapshot.me?.evidence || [];
@@ -531,6 +672,17 @@
     }
 
     const inspectedCount = [...discoveries].filter((id) => id !== "study-door").length;
+    const activeObjectives = asArray(state.snapshot.me?.activeObjectives || state.snapshot.session?.objectives);
+    if (activeObjectives.length) {
+      const objectiveList = $("#objective-list");
+      objectiveList.innerHTML = activeObjectives.slice(0, 4).map((objective, index) => {
+        const completed = Boolean(objective.completed || objective.status === "complete");
+        return `<li data-objective="dynamic-${index}" class="${completed ? "is-complete" : ""}"><span></span><p>${escapeHtml(objective.title || objective.description || objective.label || "Follow the narrator's next instruction.")}</p></li>`;
+      }).join("");
+      const finished = activeObjectives.filter((objective) => objective.completed || objective.status === "complete").length;
+      text("#objective-count", `${finished}/${activeObjectives.length}`);
+      return;
+    }
     const completed = {
       inspect: inspectedCount >= 3,
       key: hasEvidence("brass-study-key") || studyUnlocked,
@@ -553,7 +705,7 @@
     avatar.textContent = image ? "" : initials(character?.name || me.displayName);
     avatar.style.backgroundImage = image ? `url("${image}")` : "";
     text("#dossier-name", character?.name || "Awaiting assignment");
-    text("#dossier-archetype", character?.title || (me.isHost ? "Game Master" : "Your host will assign your role."));
+    text("#dossier-archetype", character?.title || (me.isHost ? "Administrator & participant" : "The Estate Narrator is preparing your role."));
     const relationships = character?.relationships;
     let relationshipText = "—";
     if (typeof relationships === "string") relationshipText = relationships;
@@ -561,9 +713,9 @@
     else if (relationships && typeof relationships === "object") relationshipText = Object.values(relationships).slice(0, 2).join(" · ");
     text("#dossier-relationship", relationshipText);
     text("#dossier-alibi", character?.alibi || "—");
-    text("#dossier-secret", character?.secret || (me.isHost ? "You hold the complete solution. Reveal it only when the accusations are locked." : "No secret has been revealed yet."));
+    text("#dossier-secret", character?.secret || (me.isHost ? "Your administrator access does not reveal the protected solution during normal play." : "No secret has been revealed yet."));
     const list = $("#personal-objectives");
-    const objectives = character?.objectives?.length ? character.objectives : [me.isHost ? "Guide the evening without revealing the solution." : "Stay observant. Trust no one."];
+    const objectives = character?.objectives?.length ? character.objectives : [me.isHost ? "Play your character normally; use emergency controls only if the session stalls." : "Stay observant. Trust no one."];
     list.innerHTML = objectives.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   }
 
@@ -571,10 +723,31 @@
     return item.type || (item.isKey ? "key" : "clue");
   }
 
+  function visibleCaseEvidence() {
+    const merged = new Map();
+    for (const item of state.snapshot?.me?.evidence || []) merged.set(item.id, item);
+    for (const item of state.snapshot?.publicEvidence || []) {
+      if (!merged.has(item.id)) merged.set(item.id, item);
+    }
+    return [...merged.values()];
+  }
+
+  function visibleEvidenceById(evidenceId) {
+    const owned = state.snapshot?.me?.evidence?.find((item) => item.id === evidenceId);
+    if (owned) return { item: owned, owned: true };
+    const publiclyRevealed = state.snapshot?.publicEvidence?.find((item) => item.id === evidenceId);
+    if (publiclyRevealed) return { item: publiclyRevealed, owned: false };
+    for (const room of state.snapshot?.rooms || []) {
+      const planted = room.plantedEvidence?.find((item) => item.id === evidenceId);
+      if (planted) return { item: planted, owned: false };
+    }
+    return { item: null, owned: false };
+  }
+
   function renderEvidence() {
     const query = String($("#evidence-search")?.value || "").trim().toLowerCase();
     const filter = $("#evidence-filter")?.value || "all";
-    const evidence = state.snapshot.me?.evidence || [];
+    const evidence = visibleCaseEvidence();
     const visible = evidence.filter((item) => {
       const type = evidenceType(item);
       const matchesType = filter === "all" || type === filter || (filter === "object" && type === "key");
@@ -585,10 +758,12 @@
     const grid = $("#evidence-grid");
     grid.innerHTML = visible.map((item) => {
       const type = evidenceType(item);
+      const visibility = item.acquired?.visibility || item.visibility || (item.public || item.revealed ? "public" : item.concealed ? "concealed" : "private");
+      const status = item.acquired?.manipulated || item.planted ? "Manipulated" : item.isKey ? "Access item" : visibility === "public" ? "Public" : visibility === "concealed" ? "Concealed" : "Private evidence";
       return `<button class="evidence-card" type="button" data-evidence-id="${escapeHtml(item.id)}">
         <span class="evidence-card-icon"><span aria-hidden="true">${escapeHtml(evidenceIcons[type] || evidenceIcons.clue)}</span></span>
         <h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description || item.detail || "Examine this evidence in your private file.")}</p>
-        <footer><span>${escapeHtml(type)}</span><span>${item.isKey ? "Access item" : "Private evidence"}</span></footer>
+        <footer><span>${escapeHtml(type)}</span><span>${escapeHtml(status)}</span></footer>
       </button>`;
     }).join("");
     $("#evidence-empty").hidden = evidence.length > 0 || Boolean(query) || filter !== "all";
@@ -600,14 +775,14 @@
   }
 
   function renderPlayers() {
-    const players = state.snapshot.players || [];
+    const players = publicParticipants();
     const connected = players.filter((player) => player.connected).length;
     text("#player-count", players.length);
     text("#ready-count", `${connected} online`);
     const grid = $("#player-grid");
-    grid.innerHTML = players.map((player) => `<article class="player-card">
+    grid.innerHTML = players.map((player) => `<article class="player-card${player.isNpc ? " is-npc" : ""}">
       <span class="player-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}<i class="${player.connected ? "" : "is-offline"}"></i></span>
-      <div><strong>${escapeHtml(player.displayName)}${player.id === state.snapshot.me.id ? " (you)" : ""}</strong><small>${escapeHtml(player.isHost ? "Game Master" : player.character?.name || "Unassigned guest")}</small></div>
+      <div><strong>${escapeHtml(player.displayName)}${player.id === state.snapshot.me.id ? " (you)" : ""}</strong><small>${escapeHtml(player.isNpc ? `${player.character?.name || "Estate guest"} · AI guest` : player.isHost ? player.character?.name || "Administrator" : player.character?.name || "Unassigned guest")}</small></div>
     </article>`).join("");
     text("#host-player-count", `${connected} online`);
   }
@@ -653,10 +828,10 @@
   }
 
   function renderConversations() {
-    const peers = (state.snapshot.players || []).filter((player) => player.id !== state.snapshot.me.id);
+    const peers = publicParticipants().filter((player) => player.id !== state.snapshot.me.id);
     const container = $("#direct-conversations");
     container.innerHTML = peers.map((player) => `<button class="conversation-item${state.currentChannel.type === "direct" && state.currentChannel.targetId === player.id ? " is-active" : ""}" type="button" data-channel="direct" data-player-id="${escapeHtml(player.id)}">
-      <span class="conversation-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}</span><span><strong>${escapeHtml(player.displayName)}</strong><small>${escapeHtml(player.connected ? "Online now" : "Away from the estate")}</small></span>
+      <span class="conversation-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}</span><span><strong>${escapeHtml(player.displayName)}</strong><small>${escapeHtml(player.isNpc ? "AI guest · in character" : player.connected ? "Online now" : "Away from the estate")}</small></span>
     </button>`).join("");
     const group = $("[data-channel='group']");
     group?.classList.toggle("is-active", state.currentChannel.type === "lobby");
@@ -678,7 +853,7 @@
   function renderMessages() {
     if (!state.snapshot) return;
     const messages = messagesForChannel();
-    const target = state.snapshot.players?.find((player) => player.id === state.currentChannel.targetId);
+    const target = publicParticipants().find((player) => player.id === state.currentChannel.targetId);
     text("#thread-name", state.currentChannel.type === "lobby" ? "All Guests" : target?.displayName || state.currentChannel.label || "Private conversation");
     text("#thread-status", state.currentChannel.type === "lobby" ? "Group conversation" : target?.connected ? "Online now" : "Private correspondence");
     const avatar = $("#thread-avatar");
@@ -722,12 +897,191 @@
     }
   }
 
+  function narratorRecord() {
+    const session = state.snapshot?.session || {};
+    const direct = session.narrator;
+    if (direct && typeof direct === "object") return direct;
+    const timeline = asArray(state.snapshot?.timeline);
+    return [...timeline].reverse().find((item) => /narrator|scene|act/i.test(item.type || item.kind || "")) || {};
+  }
+
+  function renderStory() {
+    if (!state.snapshot) return;
+    const session = state.snapshot.session || {};
+    const actIndex = currentActIndex();
+    const actTitle = session.actTitle || session.act?.title || actNames[actIndex - 1];
+    const narrator = narratorRecord();
+    const narratorTitle = narrator.title || narrator.headline || (session.status === "lobby" ? "The house is waiting" : actTitle);
+    const narratorCopy = narrator.summary || narrator.text || narrator.content || narrator.description || (session.status === "lobby"
+      ? "The candles are lit. The Estate Narrator will begin when the gathering is ready."
+      : "Follow your private objectives and the public story as the mystery unfolds.");
+
+    text("#narrator-scene-title", narratorTitle);
+    text("#narrator-scene-copy", narratorCopy);
+    text("#narrator-kicker", `Act ${roman(actIndex)} · ${actTitle}`);
+    text("#narrator-stage-title", narratorTitle);
+    text("#narrator-stage-copy", narratorCopy);
+    text("#act-number-pill", `Act ${roman(actIndex)}`);
+    text("#narrator-mode", session.mode === "fast" ? "Fast testing pace" : "Standard dinner pace");
+
+    $$("#act-list li").forEach((item, index) => {
+      item.classList.toggle("is-complete", index < actIndex - 1);
+      item.classList.toggle("is-current", index === actIndex - 1);
+    });
+
+    const actionBox = $("#narrator-stage-actions");
+    const actions = asArray(narrator.actions).filter((action) => action.label || action.title).slice(0, 3);
+    actionBox.innerHTML = actions.map((action, index) => `<button class="button ${index === 0 ? "button-gold" : "button-outline"}" type="button" data-narrator-action="${index}">${escapeHtml(action.label || action.title)}</button>`).join("");
+    actionBox._narratorActions = actions;
+
+    renderTimeline();
+    renderConfessionals();
+    renderReunion();
+    renderAwards();
+  }
+
+  function renderTimeline() {
+    const timeline = asArray(state.snapshot?.timeline).filter((item) => item.public !== false && item.private !== true);
+    const ordered = [...timeline].sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.at || a.timestamp || 0).getTime();
+      const bTime = new Date(b.createdAt || b.at || b.timestamp || 0).getTime();
+      return bTime - aTime;
+    }).slice(0, 30);
+    text("#timeline-count", `${timeline.length} moment${timeline.length === 1 ? "" : "s"}`);
+    const list = $("#story-timeline");
+    if (!ordered.length) {
+      list.innerHTML = '<li class="timeline-empty">The first public moment has not happened yet.</li>';
+      return;
+    }
+    list.innerHTML = ordered.map((item) => {
+      const at = new Date(item.createdAt || item.at || item.timestamp || "");
+      const readable = Number.isNaN(at.getTime()) ? `Act ${roman(item.actIndex || item.act || currentActIndex())}` : at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const title = item.title || item.headline || item.type || "A moment at the estate";
+      const detail = item.summary || item.text || item.content || item.description || "";
+      return `<li><time>${escapeHtml(readable)}</time><strong>${escapeHtml(title)}</strong>${detail ? `<p>${escapeHtml(detail)}</p>` : ""}</li>`;
+    }).join("");
+  }
+
+  function confessionalRecords() {
+    const source = state.privateConfessionals ?? state.snapshot?.me?.confessionals ?? state.snapshot?.me?.confessional;
+    if (Array.isArray(source)) return source;
+    if (!source || typeof source !== "object") return [];
+    const records = [];
+    if (source.current) records.push(source.current);
+    if (source.pending) records.push(...asArray(source.pending));
+    if (source.history) records.push(...asArray(source.history));
+    if (!records.length && (source.id || source.prompt || source.question)) records.push(source);
+    return [...new Map(records.filter(Boolean).map((item) => [item.id || item.confessionalId || item.prompt || item.question, item])).values()];
+  }
+
+  function confessionalIsPending(item) {
+    const status = String(item.status || "").toLowerCase();
+    return !item.response && !item.answer && !item.respondedAt && !["submitted", "complete", "answered", "sealed"].includes(status);
+  }
+
+  function renderConfessionals() {
+    const items = confessionalRecords();
+    const pending = items.find(confessionalIsPending);
+    const answered = items.filter((item) => !confessionalIsPending(item));
+    const badge = $("#confessional-badge");
+    badge.hidden = !pending;
+    text("#confessional-status", pending ? "Question waiting" : answered.length ? `${answered.length} sealed` : "Private");
+    $("#confessional-status")?.classList.toggle("is-pending", Boolean(pending));
+    const container = $("#confessional-content");
+    if (!pending && !answered.length) {
+      container.innerHTML = '<div class="confessional-empty"><span aria-hidden="true">◉</span><h3>The camera is not rolling yet</h3><p>When the producer calls you in, only you will see the question. Answers stay sealed until the reunion chooses its receipts.</p></div>';
+      return;
+    }
+
+    const promptMarkup = pending ? `<form class="confessional-prompt" data-confessional-form="${escapeHtml(pending.id || pending.confessionalId || "current")}">
+      <span class="micro-label">Producer question · Act ${roman(pending.actIndex || pending.act || currentActIndex())}</span>
+      <h3>${escapeHtml(pending.prompt || pending.question || "What are you not telling the family?")}</h3>
+      ${pending.context ? `<p>${escapeHtml(pending.context)}</p>` : ""}
+      <label class="sr-only" for="confessional-response">Your private response</label>
+      <textarea id="confessional-response" maxlength="1500" placeholder="Speak freely. No other player can read this during the investigation." required></textarea>
+      <div class="confessional-actions"><small>Your answer may be selected for the reunion after the mystery ends.</small><button class="button button-gold" type="submit">Seal response</button></div>
+    </form>` : '<div class="confessional-empty"><span aria-hidden="true">✓</span><h3>Your latest response is sealed</h3><p>No other player—including the administrator—can open it during the investigation.</p></div>';
+    const historyMarkup = answered.length ? `<div class="confessional-history">${answered.slice(-4).reverse().map((item) => `<article><small>Act ${roman(item.actIndex || item.act || 1)} · sealed</small><strong>${escapeHtml(item.prompt || item.question || "Private confessional")}</strong></article>`).join("")}</div>` : "";
+    container.innerHTML = promptMarkup + historyMarkup;
+  }
+
+  async function loadConfessionals() {
+    if (state.confessionalsLoading || !state.token) return;
+    state.confessionalsLoading = true;
+    try {
+      const result = await api("/api/game/confessionals");
+      state.privateConfessionals = result?.confessionals ?? result;
+      renderConfessionals();
+    } catch (error) {
+      if (![404, 405].includes(error.status)) toast("Confessional unavailable", error.message, "error");
+    } finally {
+      state.confessionalsLoading = false;
+    }
+  }
+
+  async function submitConfessional(form) {
+    const id = form.dataset.confessionalForm;
+    const response = $("textarea", form)?.value.trim();
+    if (!response) return;
+    const button = $("button[type='submit']", form);
+    button.disabled = true;
+    button.textContent = "Sealing…";
+    try {
+      await api(`/api/game/confessionals/${encodeURIComponent(id)}/respond`, { method: "POST", body: { response } });
+      toast("Confessional sealed", "Your answer remains private until the authorized reunion reveal.");
+      state.privateConfessionals = null;
+      await refreshState({ quiet: true });
+      await loadConfessionals();
+    } catch (error) {
+      toast("Response not sealed", error.message, "error");
+      button.disabled = false;
+      button.textContent = "Seal response";
+    }
+  }
+
+  function renderReunion() {
+    const reunion = state.snapshot?.session?.reunion;
+    const content = $("#reunion-content");
+    const lock = $("#reunion-lock");
+    const active = Boolean(reunion && (reunion.startedAt || reunion.revealedAt || reunion.status === "active" || reunion.status === "complete" || reunion.active === true));
+    lock.hidden = active;
+    content.hidden = !active;
+    if (!active) return;
+    const receipts = asArray(reunion.receipts || reunion.segments || reunion.moments || reunion.clips);
+    content.innerHTML = `<div class="section-heading"><div><p class="eyebrow">The LaRose Reunion Special</p><h2>${escapeHtml(reunion.title || "The family faces the receipts")}</h2></div><span class="count-pill">${receipts.length} receipt${receipts.length === 1 ? "" : "s"}</span></div>${reunion.introduction || reunion.summary ? `<p>${escapeHtml(reunion.introduction || reunion.summary)}</p>` : ""}${receipts.map((receipt) => {
+      const participant = receipt.participant;
+      const participantName = typeof participant === "string" ? participant : participant?.displayName || participant?.name;
+      const supportingReceipts = Array.isArray(receipt.receipts) ? receipt.receipts.map((item) => typeof item === "string" ? item : item.text || item.summary || item.title).filter(Boolean).join(" · ") : receipt.receipt;
+      return `<article class="reunion-receipt"><small>${escapeHtml(receipt.characterName || receipt.participantName || participantName || receipt.speaker || "LaRose guest")}</small><blockquote>${escapeHtml(receipt.quote || receipt.confessional || receipt.text || receipt.title || "A confession is revealed.")}</blockquote>${supportingReceipts || receipt.contradiction || receipt.context || receipt.commentary ? `<p>${escapeHtml(supportingReceipts || receipt.contradiction || receipt.context || receipt.commentary)}</p>` : ""}</article>`;
+    }).join("")}`;
+  }
+
+  function renderAwards() {
+    const raw = state.snapshot?.session?.awards;
+    let awards = [];
+    if (Array.isArray(raw)) awards = raw;
+    else if (raw && Array.isArray(raw.categories)) awards = raw.categories;
+    else if (raw && Array.isArray(raw.items)) awards = raw.items;
+    else if (raw && typeof raw === "object") awards = Object.entries(raw).filter(([, value]) => value && typeof value === "object").map(([category, value]) => ({ category, ...value }));
+    const grid = $("#awards-grid");
+    if (!awards.length) {
+      grid.innerHTML = '<div class="awards-locked"><span aria-hidden="true">✦</span><p>Awards are sealed until the reunion concludes.</p></div>';
+      return;
+    }
+    grid.innerHTML = awards.map((award) => {
+      const winner = award.winner || award.player || award.character || {};
+      const winnerName = typeof winner === "string" ? winner : winner.displayName || winner.name || award.winnerName || "LaRose guest";
+      const awardReceipts = Array.isArray(award.receipts) ? award.receipts.map((item) => typeof item === "string" ? item : item.text || item.summary).filter(Boolean).join(" · ") : award.receipt;
+      return `<article class="award-card"><span class="award-rose" aria-hidden="true">❦</span><small>${escapeHtml(award.category || award.title || "Golden Rose")}</small><strong>${escapeHtml(winnerName)}</strong><p>${escapeHtml(award.commentary || award.reason || awardReceipts || "An unforgettable performance at LaRose Estate.")}</p></article>`;
+    }).join("");
+  }
+
   function renderHostShell() {
     if (!state.snapshot.me?.isHost) return;
     const session = state.snapshot.session;
     text("#host-phase-pill", session.status === "lobby" ? "Waiting" : session.phase || session.status);
     const rows = $("#host-player-list");
-    rows.innerHTML = (state.snapshot.players || []).map((player) => `<div class="host-player-row"><span class="player-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}<i class="${player.connected ? "" : "is-offline"}"></i></span><span><strong>${escapeHtml(player.displayName)}</strong><small>${escapeHtml(player.isHost ? "Game Master" : player.character?.name || "Unassigned")}</small></span></div>`).join("");
+    rows.innerHTML = (state.snapshot.players || []).map((player) => `<div class="host-player-row"><span class="player-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}<i class="${player.connected ? "" : "is-offline"}"></i></span><span><strong>${escapeHtml(player.displayName)}</strong><small>${escapeHtml(player.isHost ? player.character?.name || "Administrator" : player.character?.name || "Unassigned")}</small></span></div>`).join("");
   }
 
   async function loadHostDashboard() {
@@ -749,7 +1103,7 @@
     const list = $("#host-player-list");
     list.innerHTML = players.map((player) => `<div class="host-player-row">
       <span class="player-avatar" ${avatarStyle(player)}>${player.avatarUrl ? "" : escapeHtml(initials(player.displayName))}<i class="${player.connected ? "" : "is-offline"}"></i></span>
-      <span><strong>${escapeHtml(player.displayName)}</strong><small>${player.discoveries?.length || 0} objects · ${player.evidenceIds?.length || 0} clues</small>
+      <span><strong>${escapeHtml(player.displayName)}</strong><small>${player.discoveryCount || 0} objects · ${player.evidenceCount || 0} clues</small>
         ${player.isHost ? "" : `<select data-character-player="${escapeHtml(player.id)}" aria-label="Character for ${escapeHtml(player.displayName)}"><option value="">Unassigned</option>${characters.map((character) => `<option value="${escapeHtml(character.id)}"${player.characterId === character.id ? " selected" : ""}${assignedElsewhere(character.id, player.id) ? " disabled" : ""}>${escapeHtml(character.name)}</option>`).join("")}</select>`}
       </span>
     </div>`).join("");
@@ -789,11 +1143,114 @@
       $("#message-badge").textContent = "0";
     }
     if (name === "host") loadHostDashboard();
+    if (name === "live") loadConfessionals();
     if (focus) {
       window.scrollTo({ top: 0, behavior: "smooth" });
       $("#main-content").focus({ preventScroll: true });
     }
     $("#mobile-menu-button").setAttribute("aria-expanded", "false");
+  }
+
+  function canonicalRoomId(key) {
+    const normalized = String(key || "grand-foyer").trim().toLowerCase().replace(/[\s_]+/g, "-");
+    return roomAliases[normalized] || normalized;
+  }
+
+  function roomForKey(key) {
+    const id = canonicalRoomId(key);
+    return state.snapshot?.rooms?.find((room) => room.id === id || room.slug === id || room.id === key) || { id, name: roomLabels[id] || key };
+  }
+
+  function roomInteractions(room) {
+    const sessionInteractions = asArray(state.snapshot?.interactions).filter((item) => item.roomId === room?.id || item.room === room?.id);
+    if (sessionInteractions.length) return sessionInteractions;
+    const supplied = room?.interactions || room?.hotspots || room?.objects || room?.features;
+    if (Array.isArray(supplied)) return supplied;
+    if (supplied && typeof supplied === "object") return Object.entries(supplied).map(([id, value]) => typeof value === "object" ? { id, ...value } : { id, name: value });
+    if (room?.id === "grand-foyer") return Object.entries(hotspotFallback).filter(([id]) => id !== "study-door").map(([id, meta]) => ({ id, name: meta.title, description: meta.description, action: "inspect" }));
+    return [];
+  }
+
+  function openRoom(key) {
+    const room = roomForKey(key);
+    state.activeRoomId = room.id;
+    text("#room-dialog-kicker", `Act ${roman(currentActIndex())} · ${room.unlocked === false ? "Locked" : "Open for investigation"}`);
+    text("#room-dialog-title", room.name || roomLabels[room.id] || "Estate room");
+    text("#room-dialog-description", room.description || room.narrative || "Choose an object or location to examine. Discoveries may differ by character.");
+    text("#room-dialog-icon", room.icon || "⌂");
+    const interactions = roomInteractions(room);
+    const plantedEvidence = asArray(room.plantedEvidence);
+    const discoveries = new Set(state.snapshot.me?.discoveries || []);
+    const list = $("#room-interaction-list");
+    if (!interactions.length && !plantedEvidence.length) {
+      list.innerHTML = '<div class="empty-state"><span aria-hidden="true">◇</span><h3>No active lead here yet</h3><p>The Estate Narrator may add interactions as the next act unfolds.</p></div>';
+    } else {
+      const interactionMarkup = interactions.map((item) => {
+        const id = item.id || item.hotspotId || item.slug;
+        const completed = item.completed || item.investigated || discoveries.has(id);
+        const availableActions = Array.isArray(item.actions) ? item.actions : [];
+        const firstAction = availableActions[0];
+        const action = typeof firstAction === "string" ? firstAction : firstAction?.id || firstAction?.action || item.action || "inspect";
+        const label = typeof firstAction === "object" ? firstAction.label : item.actionLabel || `${action.charAt(0).toUpperCase()}${action.slice(1)}`;
+        return `<button class="room-interaction${completed ? " is-complete" : ""}" type="button" data-room-interaction="${escapeHtml(id)}" data-interaction-action="${escapeHtml(action)}"${item.disabled || item.locked || item.available === false ? " disabled" : ""}>
+          <span aria-hidden="true">${completed ? "✓" : escapeHtml(item.icon || evidenceIcons[item.type] || "⌕")}</span>
+          <strong>${escapeHtml(item.name || item.title || "Examine the room")}</strong>
+          <small>${escapeHtml(item.description || item.hint || (completed ? "Already examined" : `${label} this area`))}</small>
+        </button>`;
+      }).join("");
+      const plantedMarkup = plantedEvidence.map((item) => `<button class="room-interaction is-planted" type="button" data-evidence-id="${escapeHtml(item.id)}">
+        <span aria-hidden="true">⚠</span><strong>${escapeHtml(item.title || "Unattended evidence")}</strong>
+        <small>${escapeHtml(item.description || "Someone left this evidence in the room. Its provenance may be unreliable.")}</small>
+      </button>`).join("");
+      list.innerHTML = `${interactionMarkup}${plantedMarkup}`;
+    }
+    showDialog($("#room-dialog"));
+  }
+
+  async function performInteraction(hotspotId, action = "inspect", input, { button, roomId } = {}) {
+    button?.classList.add("is-loading");
+    button?.setAttribute("aria-busy", "true");
+    try {
+      let result;
+      try {
+        result = await api("/api/game/interact", { method: "POST", body: { hotspotId, action, ...(input !== undefined ? { input } : {}), ...(roomId ? { roomId } : {}) } });
+      } catch (error) {
+        if (![404, 405].includes(error.status) || action !== "inspect" || !hotspotFallback[hotspotId]) throw error;
+        result = await api("/api/game/investigate", { method: "POST", body: { hotspotId } });
+      }
+      closeDialog($("#room-dialog"));
+      showInspection(result || {}, hotspotId);
+      const evidence = result?.evidence || result?.discoveredEvidence || [];
+      if (evidence.length) toast("Evidence discovered", evidence.length === 1 ? evidence[0].title : `${evidence.length} items were added to your case file.`);
+      await refreshState({ quiet: true });
+      return result;
+    } finally {
+      button?.classList.remove("is-loading");
+      button?.removeAttribute("aria-busy");
+    }
+  }
+
+  function askInteractionInput(hotspotId, action, roomId) {
+    const room = roomForKey(roomId);
+    const item = roomInteractions(room).find((entry) => (entry.id || entry.hotspotId || entry.slug) === hotspotId) || {};
+    openSimple({
+      kicker: item.type === "puzzle" ? "Estate puzzle" : "A closer look",
+      title: item.prompt || item.question || item.name || item.title || "What do you try?",
+      content: `<p>${escapeHtml(item.hint || item.description || "Enter your answer or chosen action.")}</p><label for="interaction-input">Your answer</label><input id="interaction-input" maxlength="120" autocomplete="off" />`,
+      actions: [
+        { label: "Try it", className: "button-gold", onClick: async () => {
+          const input = $("#interaction-input")?.value.trim();
+          if (!input) return;
+          try {
+            closeDialog($("#simple-dialog"));
+            await performInteraction(hotspotId, action, input, { roomId: room.id });
+          } catch (error) {
+            toast("That did not work", error.message, "error");
+          }
+        } },
+        { label: "Not yet", className: "button-ghost", close: true },
+      ],
+    });
   }
 
   async function investigateHotspot(hotspotId, button) {
@@ -807,16 +1264,13 @@
     button?.setAttribute("aria-busy", "true");
     text("#scene-status", "Investigating…");
     try {
-      const result = await api("/api/game/investigate", { method: "POST", body: { hotspotId } });
-      showInspection(result, hotspotId);
-      if (result.evidence?.length) toast("Evidence discovered", result.evidence.length === 1 ? result.evidence[0].title : `${result.evidence.length} items were added to your case file.`);
-      await refreshState({ quiet: true });
+      await performInteraction(hotspotId, "inspect", undefined, { button, roomId: "grand-foyer" });
     } catch (error) {
       const inactive = error.code === "GAME_NOT_ACTIVE";
       const missing = error.code === "REQUIRED_EVIDENCE_MISSING";
       openSimple({
         kicker: inactive ? "The evening has not begun" : missing ? "A locked secret" : "Investigation interrupted",
-        title: inactive ? "Wait for your host" : missing ? "You need the right key" : "This object resists inspection",
+        title: inactive ? "The dinner has not begun" : missing ? "You need the right key" : "This object resists inspection",
         content: `<p>${escapeHtml(error.message)}</p>`,
         actions: inactive && state.snapshot.me.isHost ? [
           { label: "Start the game", className: "button-gold", onClick: () => runHostAction("start"), close: true },
@@ -832,11 +1286,12 @@
 
   function showInspection(result, hotspotId, options = {}) {
     const fallback = hotspotFallback[hotspotId] || {};
-    const hotspot = result.hotspot || {};
-    const evidence = result.evidence?.[0] || null;
+    const hotspot = result.hotspot || result.interaction || {};
+    const evidenceList = Array.isArray(result.evidence) ? result.evidence : result.evidence ? [result.evidence] : Array.isArray(result.discoveredEvidence) ? result.discoveredEvidence : [];
+    const evidence = evidenceList[0] || null;
     text("#inspection-kicker", result.alreadyInvestigated ? "Previously inspected" : "Close inspection");
     text("#inspection-title", hotspot.name || fallback.title || "Discovered object");
-    text("#inspection-description", result.narrative || hotspot.description || fallback.description || "You examine the object carefully.");
+    text("#inspection-description", result.narrative || result.hint || hotspot.description || fallback.description || "You examine the object carefully.");
     text("#inspection-icon", fallback.icon || hotspot.icon || "◇");
     const found = $("#evidence-found");
     found.hidden = !evidence;
@@ -875,18 +1330,62 @@
   }
 
   function showEvidenceDetail(evidenceId) {
-    const item = state.snapshot.me?.evidence?.find((entry) => entry.id === evidenceId);
+    const found = visibleEvidenceById(evidenceId);
+    const item = found.item;
     if (!item) return;
-    const peers = (state.snapshot.players || []).filter((player) => player.id !== state.snapshot.me.id);
+    const peers = found.owned ? (state.snapshot.players || []).filter((player) => player.id !== state.snapshot.me.id) : [];
     const shareMarkup = peers.length ? `<label for="share-recipient">Share a copy with</label><select id="share-recipient"><option value="">Choose a guest…</option>${peers.map((player) => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.displayName)}</option>`).join("")}</select>` : "";
+    const declared = item.availableActions || item.allowedActions || item.actions || [];
+    const advancedActions = new Set(Array.isArray(declared) ? declared.map((action) => typeof action === "string" ? action : action.action || action.id) : []);
+    const upgradedEvidence = Array.isArray(state.snapshot.interactions) || Boolean(state.snapshot.session?.actIndex || state.snapshot.session?.mode);
+    const currentVisibility = item.acquired?.visibility || item.visibility || (item.public || item.revealed ? "public" : item.concealed ? "concealed" : "private");
+    if (found.owned && upgradedEvidence && currentVisibility === "public") advancedActions.add("conceal");
+    if (found.owned && upgradedEvidence && currentVisibility !== "public") advancedActions.add("reveal");
+    if (found.owned && upgradedEvidence && !item.isKey) advancedActions.add("plant");
+    if (found.owned && item.canConceal) advancedActions.add("conceal");
+    if (found.owned && item.canReveal) advancedActions.add("reveal");
+    if (found.owned && item.canPlant) advancedActions.add("plant");
+    const controls = [];
+    if (peers.length) controls.push({ label: "Share copy", className: "button-gold", onClick: () => shareEvidence(item.id) });
+    if (advancedActions.has("conceal")) controls.push({ label: "Conceal", className: "button-outline", onClick: () => actOnEvidence(item.id, "conceal") });
+    if (advancedActions.has("reveal")) controls.push({ label: "Reveal publicly", className: "button-outline", onClick: () => actOnEvidence(item.id, "reveal") });
+    if (advancedActions.has("plant")) controls.push({ label: "Plant evidence", className: "button-danger", onClick: () => openPlantEvidence(item.id) });
+    controls.push({ label: found.owned ? "Keep private" : "Close", className: "button-ghost", close: true });
+    const status = item.acquired?.manipulated || item.planted ? "Manipulated copy" : currentVisibility === "concealed" ? "Concealed" : currentVisibility === "public" ? "Publicly revealed" : "Private evidence";
     openSimple({
       kicker: evidenceType(item),
       title: item.title,
-      content: `<p>${escapeHtml(item.description || item.detail || "No further notes are available.")}</p>${item.detail && item.detail !== item.description ? `<p>${escapeHtml(item.detail)}</p>` : ""}${shareMarkup}<p class="micro-label">Sharing creates a copy. Your original remains in your inventory.</p>`,
-      actions: peers.length ? [
-        { label: "Share evidence", className: "button-gold", onClick: () => shareEvidence(item.id) },
-        { label: "Keep private", className: "button-outline", close: true },
-      ] : [{ label: "Return to case file", className: "button-outline", close: true }],
+      content: `<p>${escapeHtml(item.description || item.detail || "No further notes are available.")}</p>${item.detail && item.detail !== item.description ? `<p>${escapeHtml(item.detail)}</p>` : ""}<p class="privacy-chip">${escapeHtml(status)}</p>${shareMarkup}<p class="micro-label">Sharing creates a copy. Concealing or planting never changes the protected true solution.</p>`,
+      actions: controls,
+    });
+  }
+
+  async function actOnEvidence(evidenceId, action, placement = {}) {
+    try {
+      await api(`/api/game/evidence/${encodeURIComponent(evidenceId)}/action`, { method: "POST", body: { action, ...placement } });
+      closeDialog($("#simple-dialog"));
+      const labels = { conceal: "Evidence concealed", reveal: "Evidence revealed", plant: "Evidence planted" };
+      toast(labels[action] || "Evidence updated", action === "plant" ? "Its provenance remains recorded by the Estate Narrator." : "The case record has been updated.");
+      await refreshState({ quiet: true });
+    } catch (error) {
+      toast("Evidence action failed", error.message, "error");
+    }
+  }
+
+  function openPlantEvidence(evidenceId) {
+    const rooms = (state.snapshot.rooms || []).filter((room) => room.unlocked || roomIsUnlocked(room.id));
+    if (!rooms.length) {
+      toast("Nowhere to plant it", "No eligible room is currently unlocked.", "error");
+      return;
+    }
+    openSimple({
+      kicker: "A dangerous choice",
+      title: "Where will you plant the evidence?",
+      content: `<p>The Estate Narrator records this as manipulation; the genuine evidence and true solution remain intact.</p><label for="plant-room">Unlocked room</label><select id="plant-room">${rooms.map((room) => `<option value="${escapeHtml(room.id)}">${escapeHtml(room.name || roomLabels[room.id] || room.id)}</option>`).join("")}</select>`,
+      actions: [
+        { label: "Plant the evidence", className: "button-danger", onClick: () => actOnEvidence(evidenceId, "plant", { roomId: $("#plant-room")?.value }) },
+        { label: "Cancel", className: "button-ghost", close: true },
+      ],
     });
   }
 
@@ -929,7 +1428,7 @@
   }
 
   function openDirectMessageChooser() {
-    const peers = (state.snapshot.players || []).filter((player) => player.id !== state.snapshot.me.id);
+    const peers = publicParticipants().filter((player) => player.id !== state.snapshot.me.id);
     if (!peers.length) {
       toast("The estate is quiet", "Invite another guest before starting a private conversation.");
       return;
@@ -1046,9 +1545,17 @@
         await api("/api/host/game", { method: "PATCH", body: { action: session.status === "paused" ? "resume" : "pause" } });
         toast(session.status === "paused" ? "Investigation resumed" : "Investigation paused");
       } else if (action === "next_round") {
-        const round = Number(session.round || 0) + 1;
-        await api("/api/host/game", { method: "PATCH", body: { round, phase: round >= 3 ? "Interrogation" : "Investigation", ...(session.status === "lobby" ? { action: "start" } : {}) } });
-        toast("The story advances", `Round ${round} is now active.`);
+        try {
+          await api("/api/host/override", { method: "POST", body: { action: "advance" } });
+        } catch (error) {
+          if (![404, 405].includes(error.status)) throw error;
+          const round = Number(session.round || 0) + 1;
+          await api("/api/host/game", { method: "PATCH", body: { round, phase: round >= 3 ? "Interrogation" : "Investigation", ...(session.status === "lobby" ? { action: "start" } : {}) } });
+        }
+        toast("The story advances", "The Estate Narrator is moving to the next act.");
+      } else if (action === "trigger_beat") {
+        await api("/api/host/override", { method: "POST", body: { action: "trigger-beat" } });
+        toast("Story beat triggered", "The narrator has moved the current scene forward.");
       } else if (action === "unlock_study") {
         await api("/api/host/rooms/study/unlock", { method: "POST", body: {} });
         toast("Private Study unlocked", "Every guest may now enter the crime scene.");
@@ -1080,7 +1587,7 @@
   function openClueRelease() {
     const players = (state.snapshot.players || []).filter((player) => !player.isHost);
     openSimple({
-      kicker: "Game master clue",
+      kicker: "Emergency narrator clue",
       title: "Release a clue",
       content: `<label for="clue-id">Clue or evidence ID</label><input id="clue-id" value="sealed-audit-letter" /><label for="clue-player">Grant evidence copy to</label><select id="clue-player"><option value="">Release globally only</option>${players.map((player) => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.displayName)}</option>`).join("")}</select><p>Known foyer IDs include sealed-audit-letter, altered-arrival-record, and statue-brass-dust.</p>`,
       actions: [
@@ -1177,6 +1684,13 @@
   }
 
   function bindGame() {
+    document.addEventListener("submit", async (event) => {
+      const confessional = event.target.closest("[data-confessional-form]");
+      if (!confessional) return;
+      event.preventDefault();
+      await submitConfessional(confessional);
+    });
+
     document.addEventListener("click", async (event) => {
       const viewButton = event.target.closest("[data-view-target]");
       if (viewButton) {
@@ -1206,14 +1720,53 @@
         showEvidenceDetail(evidenceButton.dataset.evidenceId);
         return;
       }
+      const interactionButton = event.target.closest("[data-room-interaction]");
+      if (interactionButton) {
+        const hotspotId = interactionButton.dataset.roomInteraction;
+        const action = interactionButton.dataset.interactionAction || "inspect";
+        const room = roomForKey(state.activeRoomId || "grand-foyer");
+        const interaction = roomInteractions(room).find((item) => (item.id || item.hotspotId || item.slug) === hotspotId) || {};
+        if (interaction.requiresInput || interaction.inputRequired || interaction.input || interaction.type === "puzzle" || action === "solve") {
+          askInteractionInput(hotspotId, action, room.id);
+        } else {
+          try {
+            await performInteraction(hotspotId, action, undefined, { button: interactionButton, roomId: room.id });
+          } catch (error) {
+            toast("Interaction failed", error.message, "error");
+          }
+        }
+        return;
+      }
       const roomButton = event.target.closest("[data-room]");
       if (roomButton) {
-        const labels = { foyer: "Grand Foyer", dining: "Dining Room", library: "Library", study: "Private Study", ballroom: "Ballroom", conservatory: "Conservatory" };
-        const alias = { foyer: "grand-foyer", dining: "dining-room", library: "library", study: "study", ballroom: "ballroom", conservatory: "conservatory" };
+        const roomId = canonicalRoomId(roomButton.dataset.room);
+        const roomName = roomLabels[roomId] || "Estate room";
         if (roomButton.classList.contains("is-locked")) {
-          openSimple({ title: `${labels[roomButton.dataset.room]} is locked`, content: `<p>${roomButton.dataset.room === "study" ? "A brass key is hidden somewhere in the foyer." : "This room opens later in the investigation."}</p>` });
-        } else if (roomButton.dataset.room !== "foyer") {
-          openSimple({ kicker: "Room unlocked", title: labels[roomButton.dataset.room], content: "<p>You have secured access. Full scene exploration continues beyond the playable Grand Foyer milestone.</p>" });
+          const unlockAct = roomUnlockActs[roomId] || Number(roomButton.dataset.unlockAct) || 1;
+          openSimple({
+            kicker: "The estate is still withholding its secrets",
+            title: `${roomName} is locked`,
+            content: `<p>${roomId === "study" ? "A brass key is hidden somewhere in the Grand Foyer." : `${roomName} opens in Act ${roman(unlockAct)} as the investigation deepens.`}</p>`,
+          });
+        } else if (roomId === "grand-foyer") {
+          switchView("mansion");
+        } else {
+          openRoom(roomId);
+        }
+        return;
+      }
+      const narratorActionButton = event.target.closest("[data-narrator-action]");
+      if (narratorActionButton) {
+        const action = $("#narrator-stage-actions")?._narratorActions?.[Number(narratorActionButton.dataset.narratorAction)];
+        if (!action) return;
+        if (action.view) switchView(action.view);
+        else if (action.roomId || action.room) openRoom(action.roomId || action.room);
+        else if (action.hotspotId) {
+          try {
+            await performInteraction(action.hotspotId, action.action || "inspect", undefined, { roomId: action.roomId });
+          } catch (error) {
+            toast("Action unavailable", error.message, "error");
+          }
         }
         return;
       }
@@ -1221,7 +1774,7 @@
       if (conversation) {
         if (conversation.dataset.channel === "group") state.currentChannel = { type: "lobby", targetId: null, label: "All Guests" };
         else {
-          const player = state.snapshot.players.find((item) => item.id === conversation.dataset.playerId);
+          const player = publicParticipants().find((item) => item.id === conversation.dataset.playerId);
           state.currentChannel = { type: "direct", targetId: conversation.dataset.playerId, label: player?.displayName };
         }
         renderConversations();

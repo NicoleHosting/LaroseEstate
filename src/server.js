@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 import multer from 'multer';
@@ -65,14 +64,11 @@ function createRateLimiter({ limit, windowMs }) {
   };
 }
 
-async function writeAvatar(file, playerId, uploadDirectory) {
+function persistentAvatar(file) {
   if (!file) return null;
   const type = AVATAR_TYPES[file.mimetype];
   assert(type?.check(file.buffer), 415, 'INVALID_AVATAR', 'The uploaded file contents do not match a supported image type.');
-  await fs.mkdir(uploadDirectory, { recursive: true });
-  const filename = `${playerId}-${crypto.randomBytes(8).toString('hex')}${type.extension}`;
-  await fs.writeFile(path.join(uploadDirectory, filename), file.buffer, { mode: 0o600 });
-  return `/uploads/${filename}`;
+  return { mimeType: file.mimetype, data: file.buffer.toString('base64') };
 }
 
 function apiIndex() {
@@ -84,6 +80,7 @@ function apiIndex() {
       public: [
         'GET /api',
         'GET /api/config',
+        'GET /api/avatars/:playerId',
         'POST /api/sessions',
         'POST /api/sessions/:code/join',
       ],
@@ -92,8 +89,12 @@ function apiIndex() {
         'POST /api/auth/logout',
         'POST /api/me/avatar',
         'POST /api/game/investigate',
+        'POST /api/game/interact',
         'POST /api/game/unlock-room',
         'POST /api/game/evidence/:evidenceId/share',
+        'POST /api/game/evidence/:evidenceId/action',
+        'GET /api/game/confessionals',
+        'POST /api/game/confessionals/:confessionalId/respond',
         'POST /api/game/accusation',
         'GET|POST /api/journal',
         'PATCH|DELETE /api/journal/:entryId',
@@ -103,6 +104,7 @@ function apiIndex() {
         'GET /api/host/dashboard',
         'PATCH /api/host/players/:playerId/character',
         'PATCH /api/host/game',
+        'POST /api/host/override',
         'POST /api/host/rooms/:roomId/unlock',
         'POST /api/host/clues/:clueId/release',
         'PUT /api/host/timer',
@@ -110,7 +112,7 @@ function apiIndex() {
       ],
       socketEvents: {
         clientToServer: ['state:refresh', 'hotspot:investigate', 'message:send', 'evidence:share', 'accusation:submit', 'host:controls'],
-        serverToClient: ['state:init', 'state:update', 'message:new', 'game:error'],
+        serverToClient: ['state:init', 'state:update', 'narrator:event', 'act:changed', 'confessional:prompt', 'reunion:started', 'awards:revealed', 'message:new', 'game:error'],
       },
     },
   };
@@ -126,7 +128,7 @@ export async function createApp(options = {}) {
   const publicDirectory = path.resolve(options.publicDirectory ?? path.join(PROJECT_DIR, 'public'));
   const uploadDirectory = path.resolve(options.uploadDirectory ?? process.env.UPLOAD_DIR ?? path.join(PROJECT_DIR, 'data', 'uploads'));
   const store = options.store ?? await createStore(options.storeOptions);
-  const game = new GameService(store, { sessionSecret, uploadMaxBytes: AVATAR_MAX_BYTES });
+  const game = new GameService(store, { sessionSecret, uploadMaxBytes: AVATAR_MAX_BYTES, allowFastMode: options.allowFastMode });
   const app = express();
   const httpServer = http.createServer(app);
   const allowedOrigins = parseAllowedOrigins(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS);
@@ -158,9 +160,9 @@ export async function createApp(options = {}) {
   });
 
   async function applyAvatar(file, playerId) {
-    const avatarUrl = await writeAvatar(file, playerId, uploadDirectory);
-    if (avatarUrl) await game.setAvatar(playerId, avatarUrl);
-    return avatarUrl;
+    const avatar = persistentAvatar(file);
+    if (avatar) return game.setAvatar(playerId, avatar);
+    return null;
   }
 
   async function broadcastSession(sessionId, event = 'state:update') {
@@ -187,6 +189,14 @@ export async function createApp(options = {}) {
   app.get('/api/health', (_request, response) => response.json({ ok: true, store: store.kind, time: new Date().toISOString() }));
   app.get('/api', (_request, response) => response.json(apiIndex()));
   app.get('/api/config', (_request, response) => response.json(game.publicConfig()));
+  app.get('/api/avatars/:playerId', asyncRoute(async (request, response) => {
+    const avatar = await game.avatarAsset(request.params.playerId);
+    const contents = Buffer.from(avatar.data, 'base64');
+    response.setHeader('Content-Type', avatar.mimeType);
+    response.setHeader('Content-Length', String(contents.length));
+    response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    response.send(contents);
+  }));
 
   app.post('/api/sessions', registrationLimiter, upload.single('avatar'), asyncRoute(async (request, response) => {
     const result = await game.createSession(request.body ?? {});
@@ -223,6 +233,12 @@ export async function createApp(options = {}) {
     response.json(result);
   }));
 
+  app.post('/api/game/interact', requireAuth, asyncRoute(async (request, response) => {
+    const result = await game.interact(request.auth.player.id, request.body ?? {});
+    await broadcastSession(request.auth.session.id);
+    response.json(result);
+  }));
+
   app.post('/api/game/unlock-room', requireAuth, asyncRoute(async (request, response) => {
     const result = await game.unlockRoom(request.auth.player.id, request.body?.roomId, request.body?.evidenceId);
     await broadcastSession(request.auth.session.id);
@@ -232,6 +248,21 @@ export async function createApp(options = {}) {
   app.post('/api/game/evidence/:evidenceId/share', requireAuth, asyncRoute(async (request, response) => {
     const result = await game.shareEvidence(request.auth.player.id, request.params.evidenceId, request.body?.playerId);
     await broadcastSession(request.auth.session.id);
+    response.json(result);
+  }));
+
+  app.post('/api/game/evidence/:evidenceId/action', requireAuth, asyncRoute(async (request, response) => {
+    const result = await game.evidenceAction(request.auth.player.id, request.params.evidenceId, request.body ?? {});
+    await broadcastSession(request.auth.session.id);
+    response.json(result);
+  }));
+
+  app.get('/api/game/confessionals', requireAuth, asyncRoute(async (request, response) => {
+    response.json({ confessionals: await game.getConfessionals(request.auth.player.id) });
+  }));
+
+  app.post('/api/game/confessionals/:confessionalId/respond', requireAuth, asyncRoute(async (request, response) => {
+    const result = await game.respondConfessional(request.auth.player.id, request.params.confessionalId, request.body?.response);
     response.json(result);
   }));
 
@@ -260,6 +291,7 @@ export async function createApp(options = {}) {
     const rawMessage = await game.sendMessage(request.auth.player.id, request.body ?? {});
     await publishMessage(rawMessage);
     const serialized = (await game.messages(request.auth.player.id, { limit: 250 })).find((item) => item.id === rawMessage.id);
+    await broadcastSession(request.auth.session.id);
     response.status(201).json(serialized);
   }));
 
@@ -281,6 +313,12 @@ export async function createApp(options = {}) {
 
   app.patch('/api/host/game', requireAuth, asyncRoute(async (request, response) => {
     const result = await game.setGameControls(request.auth.player.id, request.body ?? {});
+    await broadcastSession(request.auth.session.id);
+    response.json(result);
+  }));
+
+  app.post('/api/host/override', requireAuth, asyncRoute(async (request, response) => {
+    const result = await game.adminOverride(request.auth.player.id, request.body ?? {});
     await broadcastSession(request.auth.session.id);
     response.json(result);
   }));
@@ -358,6 +396,7 @@ export async function createApp(options = {}) {
         const ownMessage = (await game.messages(playerId, { limit: 250 })).find((item) => item.id === rawMessage.id);
         acknowledgement({ ok: true, data: ownMessage });
         await publishMessage(rawMessage);
+        await broadcastSession(sessionId);
       } catch (error) {
         const failure = { code: error.code ?? 'MESSAGE_ERROR', message: error.message, details: error.details };
         acknowledgement({ ok: false, error: failure });
@@ -379,6 +418,33 @@ export async function createApp(options = {}) {
       }, 250);
     });
   });
+
+  let directorTicking = false;
+  const directorInterval = options.disableDirectorInterval ? null : setInterval(async () => {
+    if (directorTicking) return;
+    directorTicking = true;
+    try {
+      const result = await game.tick();
+      for (const item of result.results ?? []) {
+        if (!item.changed) continue;
+        for (const event of item.events ?? []) {
+          io.to(`session:${item.sessionId}`).emit('narrator:event', event);
+          if (event.type === 'act.changed') {
+            io.to(`session:${item.sessionId}`).emit('act:changed', event);
+            io.to(`session:${item.sessionId}`).emit('confessional:prompt', { actIndex: event.actIndex });
+          }
+          if (event.type === 'reunion.started') io.to(`session:${item.sessionId}`).emit('reunion:started', event);
+          if (event.type === 'awards.revealed') io.to(`session:${item.sessionId}`).emit('awards:revealed', event);
+        }
+        await broadcastSession(item.sessionId);
+      }
+    } catch (error) {
+      console.error('Autonomous director tick failed:', error);
+    } finally {
+      directorTicking = false;
+    }
+  }, Number(options.directorIntervalMs ?? process.env.DIRECTOR_INTERVAL_MS ?? 1000));
+  directorInterval?.unref?.();
 
   app.use('/api', (request, _response, next) => next(new AppError(404, 'API_NOT_FOUND', `No API route matches ${request.method} ${request.originalUrl}.`)));
   app.use(express.static(publicDirectory, { maxAge: production ? '1h' : 0 }));
@@ -437,6 +503,7 @@ export async function createApp(options = {}) {
       return httpServer.address();
     },
     async close() {
+      if (directorInterval) clearInterval(directorInterval);
       await new Promise((resolve) => io.close(resolve));
       if (httpServer.listening) await new Promise((resolve, reject) => httpServer.close((error) => error ? reject(error) : resolve()));
       listening = false;
